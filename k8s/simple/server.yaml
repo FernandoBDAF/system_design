@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: profile-server
+  namespace: profile-service
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      protocol: TCP
+      targetPort: 8080
+  selector:
+    app: profile-server
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: profile-server
+  namespace: profile-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: profile-server
+  template:
+    metadata:
+      labels:
+        app: profile-server
+    spec:
+      containers:
+        - name: server
+          # Note: The image is built and loaded into the cluster using the Makefile
+          # The 'Never' policy ensures we use the local image built by 'make build'
+          image: profile-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: profile-service-config
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20

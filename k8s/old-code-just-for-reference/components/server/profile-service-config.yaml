@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: profile-service-config
+  namespace: profile-service
+data:
+  DB_URI: "mongodb://admin:admin123@mongodb-0.mongodb.profile-service.svc.cluster.local:27017/?replicaSet=rs0&authSource=admin"
+  DB_NAME: "profile_service"
+  REDIS_ADDRESS: "redis:6379"
+  RABBITMQ_URI: "amqp://user:password@rabbitmq:5672"

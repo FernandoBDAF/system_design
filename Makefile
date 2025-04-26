@@ -59,10 +59,11 @@ build:
 	@echo "Building Docker images..."
 	@docker build -t profile-service:latest -f server/Dockerfile server/
 	@docker build -t profile-client:latest -f client/Dockerfile client/
+	@docker build -t profile-worker:latest -f worker/Dockerfile worker/
 	@echo "Loading images into Kind cluster..."
 	@kind load docker-image profile-service:latest --name profile-service
 	@kind load docker-image profile-client:latest --name profile-service
-
+	@kind load docker-image profile-worker:latest --name profile-service
 # Deployment targets
 start: create-cluster build
 	@echo "Starting the application..."

@@ -7,12 +7,17 @@ This directory contains all Kubernetes configurations for the profile service ap
 - `simple/` - Simplified and streamlined Kubernetes configurations
 
   - `namespace.yaml` - Namespace configuration
+  - `service-account.yaml` - Service account and RBAC configuration
   - `mongodb.yaml` - MongoDB deployment and service
   - `redis.yaml` - Redis deployment and service
   - `rabbitmq.yaml` - RabbitMQ statefulset and service
   - `server.yaml` - Profile service deployment and service
   - `worker.yaml` - Worker deployment
-  - `client.yaml` - Client deployment and service
+  - `client.yaml` - Client deployment and service with optimized resource limits:
+    - Memory: 512Mi limit, 256Mi request
+    - CPU: 500m limit, 200m request
+    - Liveness probe: 60s initial delay, 15s period, 5s timeout
+    - Readiness probe: 30s initial delay, 10s period, 5s timeout
   - `kind-config.yaml` - Kind cluster configuration with port mappings
   - `kustomization.yaml` - Kustomize configuration for managing all resources
 
@@ -20,6 +25,21 @@ This directory contains all Kubernetes configurations for the profile service ap
   - Contains valuable insights and configurations from previous iterations
   - Useful for understanding the evolution of the system
   - Not actively used in current deployments
+
+## Security and Access Control
+
+The client component requires access to Kubernetes API for pod monitoring. This is configured through:
+
+1. Service Account:
+
+   - Name: `pod-reader`
+   - Mounts Kubernetes API access tokens
+   - Used by the client pod
+
+2. RBAC Configuration:
+   - Role: `pod-reader`
+   - Permissions: get, list, watch pods
+   - Bound to the service account
 
 ## Port Mappings
 
@@ -47,7 +67,7 @@ The current implementation focuses on a streamlined architecture with:
 
    - Server pod with APIs and endpoints
    - Worker pod for message processing
-   - Client pod for frontend
+   - Client pod for frontend and monitoring with optimized resource limits
 
 3. Key Features:
    - Direct service-to-service communication
@@ -55,6 +75,7 @@ The current implementation focuses on a streamlined architecture with:
    - Persistent storage where needed
    - Environment variables for configuration
    - Service discovery through Kubernetes DNS
+   - RBAC for secure API access
    - Prometheus metrics for monitoring
    - Structured logging with Zap
 
@@ -103,3 +124,11 @@ After deployment, services are accessible at:
 - Redis: redis://localhost:6379
 - RabbitMQ: amqp://localhost:5672
 - RabbitMQ UI: http://localhost:15672
+
+## Future Improvements
+
+1. Consider using an Ingress controller for external access
+2. Implement proper TLS termination
+3. Add network policies for better security
+4. Consider using a service mesh for better observability
+5. Implement proper secrets management

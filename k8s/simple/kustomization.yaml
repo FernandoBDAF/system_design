@@ -4,6 +4,7 @@ namespace: profile-service
 
 resources:
   - namespace.yaml
+  - service-account.yaml
   - postgresql.yaml
   - server-configmap.yaml
   - redis.yaml

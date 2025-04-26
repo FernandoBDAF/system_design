@@ -3,11 +3,13 @@ import SystemVisualization from "./SystemVisualization";
 import TrafficControlPanel from "./TrafficControlPanel";
 import PrometheusMetrics from "./PrometheusMetrics";
 import SystemLogs from "./SystemLogs";
+import type { Pod, Link } from "../app/page";
 
 interface DashboardLayoutProps {
-  pods: any[];
-  connections: any[];
+  pods: Pod[];
+  connections: Link[];
   requestsPerSecond: number;
+  isMockedData?: boolean;
 }
 
 type TabType = "traffic" | "prometheus" | "logs";
@@ -16,6 +18,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   pods,
   connections,
   requestsPerSecond,
+  isMockedData = false,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>("traffic");
   const [isLoading, setIsLoading] = useState(false);
@@ -54,6 +57,12 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
   return (
     <div className="h-screen w-full bg-gray-100">
+      {isMockedData && (
+        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4">
+          <strong>Warning:</strong> Using mocked data. Could not fetch real
+          cluster state.
+        </div>
+      )}
       <div className="grid grid-cols-12 gap-4 h-full p-4">
         {/* Left section - Takes up 8/12 (2/3) of the screen */}
         <div className="col-span-8 bg-white rounded-lg shadow-sm p-4 overflow-auto">
@@ -61,6 +70,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             pods={pods}
             connections={connections}
             requestsPerSecond={requestsPerSecond}
+            isMockedData={isMockedData}
           />
         </div>
 

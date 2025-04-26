@@ -1,6 +1,22 @@
 # Profile Service Client
 
-This is a [Next.js](https://nextjs.org) project that provides a dashboard for monitoring and managing the profile service.
+## How to Use This Document
+
+This README is structured to help developers, operators, and contributors quickly understand, use, and extend the Profile Service Client. Each section is focused on a specific aspect of the project:
+
+- **Development & Usage:** How to run, build, and develop the client locally and in production.
+- **Kubernetes Deployment:** How the client is deployed and managed in a Kubernetes environment, including Makefile usage.
+- **Architecture & Technical Decisions:** The rationale behind major technical and integration choices, including frontend stack, API integration, Kubernetes alignment, Docker/build pipeline, and how the client fits with the rest of the system.
+- **Monitoring & Observability:** How the client supports operational visibility, including Prometheus, Grafana, and real-time metrics.
+- **Troubleshooting:** Common issues and their solutions for both development and production environments.
+- **Learn More:** Resources for learning about Next.js and related technologies.
+
+When adding new information, please:
+
+- Place usage instructions in the appropriate section (Development, Deployment, etc.).
+- Document new technical decisions or architectural changes in the "Architecture & Technical Decisions" section.
+- Add new troubleshooting tips to the Troubleshooting section.
+- Keep the structure consistent for easy navigation.
 
 ---
 
@@ -189,18 +205,82 @@ make logs COMPONENT=client
 make check-connection
 ```
 
-## Architecture Notes
+## Architecture & Technical Decisions
 
-- Uses Next.js API routes for Kubernetes API access
-- Implements real-time updates using WebSocket
-- Integrates with the Kubernetes API for pod monitoring
-- Uses environment variables for configuration
-- Implements proper error handling and retry logic
-- Configured with optimized resource limits and health checks
-- Uses D3.js for system visualization
-- Implements traffic simulation and monitoring
-- Features graceful degradation during outages
-- Includes comprehensive connection status monitoring
+### 1. Frontend Stack: Next.js 15 + TypeScript + Tailwind CSS
+
+- **Next.js 15**: Chosen for its modern React features (App Router, Server Components, Turbopack), fast builds, and suitability for real-time dashboards.
+- **TypeScript**: Enforced strict typing for maintainability and reliability across the codebase.
+- **Tailwind CSS v4**: Utility-first CSS for rapid prototyping and easy theming.
+- **D3.js**: Used for custom, dynamic system visualizations.
+
+### 2. API Integration & Data Flow
+
+- **Next.js API Routes**: Used for secure, server-side integration with Kubernetes (via `@kubernetes/client-node`). This allows the frontend to fetch real-time cluster state without exposing the K8s API to the browser.
+- **Type-Safe Data**: All API routes and data transformations use explicit types (e.g., `Pod`, `Link`, Kubernetes types) for safety and clarity.
+- **Mock Data Fallback**: If the cluster API is unavailable, the UI falls back to mock data and alerts the user, ensuring the dashboard is always usable.
+
+### 3. Kubernetes Alignment
+
+- **Namespace & Service Discovery**: All components (client, server, worker) use the same `profile-service` namespace for easy service discovery and RBAC.
+- **Resource Limits & Probes**: Deployments use resource requests/limits and health/readiness probes for robust operation in K8s.
+- **RBAC & Service Accounts**: The client uses a service account with read-only permissions for pod monitoring, following least-privilege principles.
+- **Deployment via Kustomize**: All manifests are managed in `k8s/simple/` and deployed via `kubectl apply -k`, ensuring consistency and easy overlays.
+
+### 4. Docker & Build Pipeline
+
+- **Monorepo-Friendly Dockerfile**: The Dockerfile is designed to work from the monorepo root, copying only the client folder for builds.
+- **Pre-Build Lint & Type-Check**: Linting and type-checking are run before the production build to catch errors early.
+- **Non-root User**: The Docker image runs as a non-root user for security.
+- **kubectl in Image**: The client image includes `kubectl` for in-cluster API access and debugging.
+
+### 5. Integration with Other Project Parts
+
+- **Consistent API Contracts**: The client expects the same API endpoints and data shapes as the server exposes, ensuring seamless integration.
+- **Shared Environment Variables**: All services use environment variables for configuration, making it easy to align settings across `client`, `server`, and `k8s`.
+- **Makefile Orchestration**: The Makefile centralizes cluster management, build, and deployment for all components, ensuring reproducibility and ease of use.
+
+### 6. Monitoring & Observability
+
+- **Prometheus & Grafana**: The stack includes Prometheus and Grafana for metrics and dashboards, with the client providing links and integration points.
+- **Real-Time Metrics**: The client fetches and visualizes real-time metrics, pod status, and logs, supporting operational visibility.
+
+### 7. Error Handling & Resilience
+
+- **Graceful Degradation**: The UI always shows something useful, even if the backend or cluster is down.
+- **Automatic Retry & Status Indicators**: Connection status is always visible, and the client retries failed API calls.
+
+### 8. Dependency Management & Compatibility
+
+- **React Version and Peer Dependencies:**
+  The project uses React 19, but some dependencies require React 18. The Dockerfile uses `npm install --legacy-peer-deps` to resolve these conflicts. This enables use of the latest React features, but contributors should monitor for compatibility issues and be ready to downgrade if needed.
+
+### 9. Dockerfile Build Order
+
+- **Source Code Copy Before Lint/Type-Check:**
+  The Dockerfile copies all source files before running lint and type-check steps, ensuring static analysis tools have access to the full codebase and preventing build errors.
+
+### 10. Mock Data Handling in React
+
+- **useMemo for Mock Data:**
+  Mock data is wrapped in `useMemo` to avoid unnecessary re-creation and to comply with React's linting rules, ensuring stable and efficient component behavior.
+
+### 11. Error Handling Philosophy
+
+- **Graceful Fallbacks:**
+  The UI always provides feedback, even if the backend is down, by falling back to mock data and alerting the user.
+
+### 12. Build & Linting in CI/CD
+
+- **Pre-Build Linting and Type-Checking:**
+  Linting and type-checking are enforced in the Docker build, ensuring only high-quality code is deployed.
+
+### 13. Next.js Standalone Output for Docker
+
+- **Standalone Output Mode:**
+  The project uses Next.js's `output: 'standalone'` mode (set in `next.config.ts`). This generates a minimal `.next/standalone` directory for production, which is copied into the Docker image. This approach reduces image size and ensures all required files are included for deployment. If you change the output mode, you must also update the Dockerfile accordingly.
+
+---
 
 ## Monitoring
 

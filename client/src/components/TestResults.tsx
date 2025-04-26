@@ -4,7 +4,6 @@ import {
   Title,
   Text,
   Grid,
-  Col,
   Metric,
   ProgressBar,
 } from "@tremor/react";

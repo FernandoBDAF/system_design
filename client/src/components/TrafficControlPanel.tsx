@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 
-interface TrafficControlPanelProps {}
+type TrafficControlPanelProps = object;
 
 const TrafficControlPanel: React.FC<TrafficControlPanelProps> = () => {
   const [requestRate, setRequestRate] = useState(100);

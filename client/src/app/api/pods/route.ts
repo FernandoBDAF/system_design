@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { KubeConfig, CoreV1Api } from "@kubernetes/client-node";
+import {
+  KubeConfig,
+  CoreV1Api,
+  V1Pod,
+  V1ContainerStatus,
+} from "@kubernetes/client-node";
 
 export async function GET() {
   try {
@@ -9,14 +14,14 @@ export async function GET() {
     const k8sApi = kc.makeApiClient(CoreV1Api);
     const namespace = process.env.NAMESPACE || "profile-service";
 
-    const response = await k8sApi.listNamespacedPod(namespace);
-    const pods = response.body.items.map((pod) => ({
+    const response = await k8sApi.listNamespacedPod({ namespace });
+    const pods = response.items?.map((pod: V1Pod) => ({
       name: pod.metadata?.name || "",
       status: pod.status?.phase || "Unknown",
       ip: pod.status?.podIP || "",
       node: pod.spec?.nodeName || "",
       containers:
-        pod.status?.containerStatuses?.map((container) => ({
+        pod.status?.containerStatuses?.map((container: V1ContainerStatus) => ({
           name: container.name,
           ready: container.ready,
           restartCount: container.restartCount,

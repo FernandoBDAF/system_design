@@ -11,7 +11,7 @@ interface UseConnectionOptions {
 interface UseConnectionReturn {
   status: ConnectionStatus;
   lastError: Error | null;
-  send: (data: any) => void;
+  send: (data: unknown) => void;
   reconnect: () => void;
 }
 
@@ -100,7 +100,7 @@ export function useConnection({
   }, [socket, connect]);
 
   const send = useCallback(
-    (data: any) => {
+    (data: unknown) => {
       if (socket && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify(data));
       } else {

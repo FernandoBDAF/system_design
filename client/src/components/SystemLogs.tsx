@@ -62,7 +62,9 @@ const SystemLogs: React.FC = () => {
         <select
           className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
           value={logLevel}
-          onChange={(e) => setLogLevel(e.target.value as any)}
+          onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+            setLogLevel(e.target.value as typeof logLevel)
+          }
         >
           <option value="all">All Levels</option>
           <option value="info">Info</option>

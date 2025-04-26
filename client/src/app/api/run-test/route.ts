@@ -1,21 +1,7 @@
-import { NextResponse } from "next/server";
 
 // When running inside the cluster, use the internal service name
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://profile-service:8080";
-
-// Mock response for development
-const mockResponse = {
-  totalRequests: 100,
-  successfulRequests: 95,
-  failedRequests: 5,
-  avgResponseTime: 150,
-  podDistribution: {
-    "profile-service-867cc4b49b-9h7fs": 35,
-    "profile-service-867cc4b49b-fcbc4": 33,
-    "profile-service-867cc4b49b-j982v": 32,
-  },
-};
 
 interface RequestResult {
   success: boolean;
@@ -35,7 +21,7 @@ interface TestResult {
 async function sendRequest(
   url: string,
   method: string = "GET",
-  body?: any
+  body?: Record<string, unknown>
 ): Promise<RequestResult> {
   const startTime = Date.now();
   try {
@@ -61,12 +47,6 @@ async function sendRequest(
       pod: "unknown",
     };
   }
-}
-
-interface Profile {
-  name: string;
-  email: string;
-  bio: string;
 }
 
 async function runReadTest(count: number): Promise<TestResult> {
@@ -173,14 +153,10 @@ async function runMixedTest(count: number): Promise<TestResult> {
   return result;
 }
 
-interface TestRequest {
-  testType: "read" | "write" | "mixed" | "burst";
-  count: number;
-}
-
-export async function POST(request: Request) {
+export async function POST(request: Request): Promise<Response> {
   try {
-    const { testType, count } = await request.json();
+    const { testType, count }: { testType: string; count: number } =
+      await request.json();
     console.log(`Received test request - type: ${testType}, count: ${count}`);
 
     let result: TestResult;
@@ -197,18 +173,12 @@ export async function POST(request: Request) {
         break;
       default:
         console.error("Invalid test type:", testType);
-        return NextResponse.json(
-          { error: "Invalid test type" },
-          { status: 400 }
-        );
+        return Response.json({ error: "Invalid test type" }, { status: 400 });
     }
 
-    return NextResponse.json(result);
+    return Response.json(result);
   } catch (error) {
     console.error("Error running test:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return Response.json({ error: "Internal server error" }, { status: 500 });
   }
 }

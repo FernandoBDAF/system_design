@@ -25,6 +25,10 @@ spec:
               value: "http://profile-service:8080"
             - name: NEXT_PUBLIC_WS_URL
               value: "ws://profile-service:8080/ws"
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
           volumeMounts:
             - name: kube-api-access
               mountPath: /var/run/secrets/kubernetes.io/serviceaccount

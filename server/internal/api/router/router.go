@@ -1,7 +1,7 @@
 package router
 
 import (
-	"github.com/fernandobarroso/profile-service/internal/handler"
+	"github.com/fernandobarroso/profile-service/internal/api/handler"
 	"github.com/gin-gonic/gin"
 )
 
@@ -21,7 +21,7 @@ func SetupRouter(profileHandler *handler.ProfileHandler) *gin.Engine {
 		{
 			profiles.POST("", profileHandler.Create)
 			profiles.GET("", profileHandler.List)
-			profiles.GET("/:id", profileHandler.Get)
+			profiles.GET("/:id", profileHandler.GetProfile)
 			profiles.PUT("/:id", profileHandler.Update)
 			profiles.DELETE("/:id", profileHandler.Delete)
 			profiles.POST("/random", profileHandler.GenerateRandom)

@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/fernandobarroso/profile-service/internal/api/middleware/logger"
+	"github.com/fernandobarroso/profile-service/internal/api/middleware/metrics"
 	"github.com/fernandobarroso/profile-service/internal/config"
-	"github.com/fernandobarroso/profile-service/internal/logger"
-	"github.com/fernandobarroso/profile-service/internal/metrics"
 	"github.com/fernandobarroso/profile-service/internal/models"
 	"github.com/fernandobarroso/profile-service/internal/repository"
 	_ "github.com/lib/pq"
@@ -145,17 +145,45 @@ func (r *Repository) Get(ctx context.Context, id string) (*models.Profile, error
 
 // Update updates a profile
 func (r *Repository) Update(ctx context.Context, id string, profile *models.Profile) error {
+	start := time.Now()
+
+	// First get the current profile
+	currentProfile, err := r.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Merge updates with current profile
+	if profile.Name != "" {
+		currentProfile.Name = profile.Name
+	}
+	if profile.Email != "" {
+		currentProfile.Email = profile.Email
+	}
+	if profile.Bio != "" {
+		currentProfile.Bio = profile.Bio
+	}
+	if profile.ImageURLs != nil {
+		currentProfile.ImageURLs = profile.ImageURLs
+	}
+
 	query := `
 		UPDATE profiles
-		SET name = $1, email = $2, bio = $3, image_urls = $4, updated_at = $5
+		SET name = $1, email = $2, bio = $3, image_urls = $4::jsonb, updated_at = $5
 		WHERE id = $6
 	`
 
+	// Convert ImageURLs to JSON
+	imageURLsJSON, err := json.Marshal(currentProfile.ImageURLs)
+	if err != nil {
+		return err
+	}
+
 	result, err := r.db.ExecContext(ctx, query,
-		profile.Name,
-		profile.Email,
-		profile.Bio,
-		profile.ImageURLs,
+		currentProfile.Name,
+		currentProfile.Email,
+		currentProfile.Bio,
+		imageURLsJSON,
 		time.Now(),
 		id,
 	)
@@ -177,7 +205,11 @@ func (r *Repository) Update(ctx context.Context, id string, profile *models.Prof
 		return repository.ErrNotFound
 	}
 
+	// Update the input profile with the merged data
+	*profile = *currentProfile
+
 	metrics.DbOperationsTotal.WithLabelValues("update", "success").Inc()
+	metrics.DbOperationDuration.WithLabelValues("update").Observe(time.Since(start).Seconds())
 	return nil
 }
 

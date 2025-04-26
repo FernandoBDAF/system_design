@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/fernandobarroso/profile-service/internal/logger"
+	"github.com/fernandobarroso/profile-service/internal/api/middleware/logger"
+	"github.com/fernandobarroso/profile-service/internal/api/service"
 	"github.com/fernandobarroso/profile-service/internal/models"
-	"github.com/fernandobarroso/profile-service/internal/service"
 	"github.com/fernandobarroso/profile-service/internal/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -48,17 +48,22 @@ func (h *ProfileHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, profile)
 }
 
-// Get handles profile retrieval
-func (h *ProfileHandler) Get(c *gin.Context) {
+// GetProfile handles GET /profiles/{id} requests
+func (h *ProfileHandler) GetProfile(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		h.handleError(c, http.StatusBadRequest, "Missing profile ID", nil)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID is required"})
 		return
 	}
 
 	profile, err := h.service.Get(c.Request.Context(), id)
 	if err != nil {
-		h.handleError(c, http.StatusInternalServerError, "Failed to get profile", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get profile"})
+		return
+	}
+
+	if profile == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Profile not found"})
 		return
 	}
 

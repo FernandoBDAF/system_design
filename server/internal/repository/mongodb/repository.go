@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/fernandobarroso/profile-service/internal/api/middleware/logger"
+	"github.com/fernandobarroso/profile-service/internal/api/middleware/metrics"
 	"github.com/fernandobarroso/profile-service/internal/config"
-	"github.com/fernandobarroso/profile-service/internal/logger"
-	"github.com/fernandobarroso/profile-service/internal/metrics"
 	"github.com/fernandobarroso/profile-service/internal/models"
 	"github.com/fernandobarroso/profile-service/internal/repository"
 	"go.mongodb.org/mongo-driver/bson"

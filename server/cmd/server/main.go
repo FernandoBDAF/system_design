@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -9,17 +10,17 @@ import (
 	"syscall"
 	"time"
 
-	"fmt"
-
+	"github.com/fernandobarroso/profile-service/internal/api/handler"
+	"github.com/fernandobarroso/profile-service/internal/api/middleware/logger"
+	"github.com/fernandobarroso/profile-service/internal/api/middleware/metrics"
+	"github.com/fernandobarroso/profile-service/internal/api/router"
+	"github.com/fernandobarroso/profile-service/internal/api/service"
+	"github.com/fernandobarroso/profile-service/internal/cache"
 	"github.com/fernandobarroso/profile-service/internal/cache/redis"
 	"github.com/fernandobarroso/profile-service/internal/config"
-	"github.com/fernandobarroso/profile-service/internal/handler"
-	"github.com/fernandobarroso/profile-service/internal/logger"
-	"github.com/fernandobarroso/profile-service/internal/metrics"
 	"github.com/fernandobarroso/profile-service/internal/queue/rabbitmq"
 	"github.com/fernandobarroso/profile-service/internal/repository/postgresql"
-	"github.com/fernandobarroso/profile-service/internal/router"
-	"github.com/fernandobarroso/profile-service/internal/service"
+
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
@@ -46,9 +47,14 @@ func main() {
 	defer profileRepo.Close(context.Background())
 
 	// Initialize Redis client
+	var cacheImpl cache.Cache
 	redisClient, err := redis.NewClient(cfg)
 	if err != nil {
-		logger.Log.Warn("Failed to connect to Redis, continuing without cache", zap.Error(err))
+		log.Printf("WARN: Failed to initialize Redis client: %v", err)
+		log.Printf("WARN: Using in-memory cache implementation")
+		cacheImpl = cache.NewMemoryCache()
+	} else {
+		cacheImpl = redisClient
 	}
 
 	// Initialize RabbitMQ connection
@@ -58,7 +64,7 @@ func main() {
 	}
 
 	// Initialize components
-	profileService := service.NewProfileService(profileRepo, redisClient, rabbitConn)
+	profileService := service.NewProfileService(profileRepo, cacheImpl, rabbitConn)
 	profileHandler := handler.NewProfileHandler(profileService)
 
 	// Initialize Gin router

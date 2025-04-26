@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/fernandobarroso/profile-service/internal/api/middleware/logger"
+	"github.com/fernandobarroso/profile-service/internal/api/middleware/metrics"
 	"github.com/fernandobarroso/profile-service/internal/cache"
-	"github.com/fernandobarroso/profile-service/internal/logger"
-	"github.com/fernandobarroso/profile-service/internal/metrics"
 	"github.com/fernandobarroso/profile-service/internal/models"
 	"github.com/fernandobarroso/profile-service/internal/queue"
 	"github.com/fernandobarroso/profile-service/internal/repository"
@@ -47,12 +47,12 @@ func (s *ProfileService) Create(ctx context.Context, profile *models.Profile) er
 	}
 
 	// Cache the profile
-	// if err := s.cache.Set(ctx, profile.ID, profile, 24*time.Hour); err != nil {
-	// 	logger.Log.Error("Failed to cache profile",
-	// 		zap.String("id", profile.ID),
-	// 		zap.Error(err),
-	// 	)
-	// }
+	if err := s.cache.Set(ctx, profile.ID, profile, 24*time.Hour); err != nil {
+		logger.Log.Error("Failed to cache profile",
+			zap.String("id", profile.ID),
+			zap.Error(err),
+		)
+	}
 
 	// Publish event
 	if err := s.publishEvent(ctx, "profile_created", profile); err != nil {
@@ -67,18 +67,22 @@ func (s *ProfileService) Create(ctx context.Context, profile *models.Profile) er
 }
 
 // Get retrieves a profile by ID
-func (s *ProfileService) Get(ctx context.Context, id string) (*models.Profile, error) {
+func (s *ProfileService) Get(ctx context.Context, id string) (*models.ProfileResponse, error) {
 	start := time.Now()
 
 	// Try to get from cache first
-	// profile, err := s.cache.Get(ctx, id)
-	// if err == nil && profile != nil {
-	// 	metrics.CacheHits.Inc()
-	// 	return profile, nil
-	// }
+	profile, err := s.cache.Get(ctx, id)
+	if err == nil && profile != nil {
+		metrics.CacheHits.Inc()
+		return &models.ProfileResponse{
+			Profile: profile,
+			Source:  "cache",
+		}, nil
+	}
 
 	// If not in cache, get from repository
-	profile, err := s.repository.Get(ctx, id)
+	metrics.CacheMisses.Inc()
+	profile, err = s.repository.Get(ctx, id)
 	if err != nil {
 		metrics.DbOperationsTotal.WithLabelValues("get", "error").Inc()
 		logger.Log.Error("Failed to get profile",
@@ -94,16 +98,19 @@ func (s *ProfileService) Get(ctx context.Context, id string) (*models.Profile, e
 	}
 
 	// Cache the profile
-	// if err := s.cache.Set(ctx, id, profile, 24*time.Hour); err != nil {
-	// 	logger.Log.Error("Failed to cache profile",
-	// 		zap.String("id", id),
-	// 		zap.Error(err),
-	// 	)
-	// }
+	if err := s.cache.Set(ctx, id, profile, 24*time.Hour); err != nil {
+		logger.Log.Error("Failed to cache profile",
+			zap.String("id", id),
+			zap.Error(err),
+		)
+	}
 
 	metrics.DbOperationsTotal.WithLabelValues("get", "success").Inc()
 	metrics.DbOperationDuration.WithLabelValues("get").Observe(time.Since(start).Seconds())
-	return profile, nil
+	return &models.ProfileResponse{
+		Profile: profile,
+		Source:  "database",
+	}, nil
 }
 
 // Update updates an existing profile
@@ -119,20 +126,33 @@ func (s *ProfileService) Update(ctx context.Context, id string, profile *models.
 		return err
 	}
 
-	// Update cache
-	if err := s.cache.Set(ctx, id, profile, 24*time.Hour); err != nil {
+	// Get the complete updated profile
+	updatedProfile, err := s.repository.Get(ctx, id)
+	if err != nil {
+		logger.Log.Error("Failed to get updated profile",
+			zap.String("id", id),
+			zap.Error(err),
+		)
+		return err
+	}
+
+	// Update cache with complete profile (use same TTL as new profiles)
+	if err := s.cache.Set(ctx, id, updatedProfile, 24*time.Hour); err != nil {
 		logger.Log.Error("Failed to cache profile",
 			zap.String("id", id),
 			zap.Error(err),
 		)
 	}
 
-	// Publish event
-	if err := s.publishEvent(ctx, "profile_updated", profile); err != nil {
+	// Publish event with complete profile
+	if err := s.publishEvent(ctx, "profile_updated", updatedProfile); err != nil {
 		logger.Log.Error("Failed to publish event",
 			zap.Error(err),
 		)
 	}
+
+	// Update the input profile with the complete data
+	*profile = *updatedProfile
 
 	metrics.DbOperationsTotal.WithLabelValues("update", "success").Inc()
 	metrics.DbOperationDuration.WithLabelValues("update").Observe(time.Since(start).Seconds())

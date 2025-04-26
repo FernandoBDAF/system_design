@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/fernandobarroso/profile-service/internal/api/middleware/logger"
+	"github.com/fernandobarroso/profile-service/internal/api/middleware/metrics"
 	"github.com/fernandobarroso/profile-service/internal/config"
-	"github.com/fernandobarroso/profile-service/internal/logger"
-	"github.com/fernandobarroso/profile-service/internal/metrics"
 	"github.com/fernandobarroso/profile-service/internal/queue"
 	"github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"

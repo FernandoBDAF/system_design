@@ -12,6 +12,7 @@ type Profile struct {
 	ImageURLs []string  `json:"image_urls" bson:"image_urls"`
 	CreatedAt time.Time `json:"created_at" bson:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" bson:"updated_at"`
+	GetFrom   string    `json:"get_from" bson:"get_from"`
 }
 
 type CreateProfileRequest struct {
@@ -24,4 +25,9 @@ type UpdateProfileRequest struct {
 	Name  string `json:"name"`
 	Email string `json:"email" binding:"omitempty,email"`
 	Bio   string `json:"bio"`
+}
+
+type ProfileResponse struct {
+	Profile *Profile `json:"profile"`
+	Source  string   `json:"source"`
 }

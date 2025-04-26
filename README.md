@@ -8,11 +8,11 @@ This project implements a profile service system with a microservices architectu
 
 ### Core Services
 
-1. **MongoDB**: Primary database for profile data storage
+1. **PostgreSQL**: Primary database for profile data storage
 
    - Persistent storage for data durability
    - Single replica for development environment
-   - Exposed on port 27017
+   - Exposed on port 5432
 
 2. **Redis**: Caching layer
 
@@ -30,7 +30,7 @@ This project implements a profile service system with a microservices architectu
 1. **Profile Service (Server)**
 
    - REST API for profile management
-   - Connects to MongoDB, Redis, and RabbitMQ
+   - Connects to PostgreSQL, Redis, and RabbitMQ
    - Exposed on port 30080
    - Health checks and metrics endpoints
 
@@ -74,7 +74,7 @@ This project implements a profile service system with a microservices architectu
 
 2. **Component Initialization Order**
 
-   - MongoDB starts first (database layer)
+   - PostgreSQL starts first (database layer)
    - Redis starts second (caching layer)
    - RabbitMQ starts third (message broker)
    - Server starts fourth (API layer)
@@ -95,6 +95,7 @@ This project implements a profile service system with a microservices architectu
 - `make status`: Check component status
 - `make logs`: View component logs (e.g., `make logs COMPONENT=server`)
 - `make test`: Run API tests
+- `make port-forward`: Set up port forwarding for all services
 - `make clean`: Clean Kubernetes resources
 - `make clean-all`: Clean all resources (Kubernetes, Docker, and cluster)
 
@@ -105,7 +106,7 @@ Note: All cluster management operations are centralized in the Makefile to ensur
 - Client UI: http://localhost:3000
 - Server API: http://localhost:30080
 - Worker API: http://localhost:30081
-- MongoDB: mongodb://localhost:27017
+- PostgreSQL: postgresql://localhost:5432
 - Redis: redis://localhost:6379
 - RabbitMQ: amqp://localhost:5672
 - RabbitMQ UI: http://localhost:15672
@@ -116,7 +117,7 @@ Note: All cluster management operations are centralized in the Makefile to ensur
 k8s/
 ├── simple/           # Current Kubernetes configurations
 │   ├── namespace.yaml
-│   ├── mongodb.yaml
+│   ├── postgres.yaml
 │   ├── redis.yaml
 │   ├── rabbitmq.yaml
 │   ├── server.yaml
@@ -125,6 +126,25 @@ k8s/
 │   ├── kind-config.yaml
 │   └── kustomization.yaml
 └── old-code-just-for-reference/  # Previous implementations
+
+server/
+├── internal/
+│   ├── api/          # API-related code
+│   │   ├── handler/  # HTTP handlers
+│   │   ├── router/   # Routing configuration
+│   │   ├── service/  # Business logic
+│   │   └── middleware/ # Request/response middleware
+│   ├── repository/   # Data persistence
+│   ├── models/       # Data structures
+│   ├── queue/        # Message queue
+│   ├── cache/        # Caching
+│   ├── utils/        # Utilities
+│   └── config/       # Configuration
+├── cmd/              # Application entry points
+├── Dockerfile        # Container configuration
+├── go.mod            # Go dependencies
+├── go.sum            # Go dependencies checksum
+└── README.md         # Server documentation
 ```
 
 ## Testing
@@ -169,3 +189,61 @@ The system includes various test endpoints:
    make clean-all
    make start
    ```
+
+## Caching Implementation
+
+### Cache Architecture
+
+The system implements a two-level caching strategy:
+
+1. **Redis Cache Layer**
+
+   - FIFO (First-In-First-Out) eviction policy
+   - Maximum cache size: 10 profiles
+   - Default TTL: 24 hours for new entries, 1 hour for updates
+   - Atomic operations for cache updates
+   - Cache invalidation on profile updates
+
+2. **Cache Behavior**
+   - Profiles are cached on first read
+   - Cache hits provide ~2x performance improvement
+   - Cache is automatically invalidated on profile updates
+   - Oldest entries are evicted when cache is full
+   - Supports atomic operations for consistency
+
+### Cache Performance
+
+- Cache hits: ~7-18ms response time
+- Database hits: ~8-20ms response time
+- Cache operations:
+  - Get: Single Redis operation (~7-12ms)
+  - Set: Two Redis operations + eviction check (~13-18ms)
+  - Update: Cache invalidation + Set (~14-20ms)
+  - Delete: Cache removal + invalidation (~8-15ms)
+
+### Monitoring and Metrics
+
+- Cache hits and misses tracking
+- Eviction monitoring
+- Response time tracking
+- Source tracking (cache vs database)
+- Performance metrics via Prometheus
+
+### Areas for Improvement
+
+1. **Metrics Accuracy**
+
+   - Cache miss counting needs improvement
+   - Better correlation between metrics and actual behavior
+   - More detailed performance tracking
+
+2. **Cache Consistency**
+
+   - Stricter FIFO implementation
+   - Better eviction pattern tracking
+   - More predictable cache behavior
+
+3. **Performance Optimization**
+   - Reduce cache operation overhead
+   - Optimize Redis transactions
+   - Better connection pooling

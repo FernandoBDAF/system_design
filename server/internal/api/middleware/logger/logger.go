@@ -8,9 +8,11 @@ import (
 var Log *zap.Logger
 
 func InitLogger() error {
-	config := zap.NewProductionConfig()
+	config := zap.NewDevelopmentConfig()
 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	config.EncoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
+	config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	config.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
+	config.EncoderConfig.EncodeCaller = zapcore.ShortCallerEncoder
 
 	var err error
 	Log, err = config.Build()

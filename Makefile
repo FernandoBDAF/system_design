@@ -1,4 +1,4 @@
-.PHONY: all build deploy undeploy clean help start stop restart status logs test clean-all port-forward create-cluster delete-profile get-profiles
+.PHONY: all build deploy undeploy clean help start stop restart status logs test clean-all port-forward create-cluster delete-profile get-profiles test-cache logs-server clean-db test-create-profiles test-update test-monitoring
 
 # Default target
 all: help
@@ -19,6 +19,12 @@ help:
 	@echo "  make port-forward  - Start port forwarding for all services"
 	@echo "  make delete-profile - Delete a profile by ID"
 	@echo "  make get-profiles  - Get all profiles"
+	@echo "  make test-cache    - Run cache tests"
+	@echo "  make test-update   - Run update tests"
+	@echo "  make logs-server   - Show server logs in real-time"
+	@echo "  make clean-db      - Clean all profiles from the database"
+	@echo "  make test-create-profiles - Create test profiles"
+	@echo "  make test-monitoring - Run monitoring and metrics tests"
 	@echo ""
 	@echo "Note: All cluster management operations are centralized in this Makefile"
 
@@ -96,6 +102,10 @@ ifndef COMPONENT
 endif
 	@kubectl logs -f -l app=$(COMPONENT) -n profile-service
 
+logs-server: ## Show server logs in real-time
+	@echo "Showing server logs..."
+	@kubectl logs -f -l app=profile-server -n profile-service
+
 # Test targets
 test:
 	@echo "Running API tests..."
@@ -120,4 +130,28 @@ get-profiles:
 # Port forwarding target
 port-forward:
 	@echo "Starting port forwarding for all services..."
-	@./port-forward.sh 
+	@./port-forward.sh
+
+test-cache: ## Run cache tests
+	@echo "Running cache tests..."
+	@chmod +x test_server_cache.sh
+	@./test_server_cache.sh
+
+clean-db: ## Clean all profiles from the database
+	@echo "Cleaning profiles table..."
+	@kubectl exec -n profile-service -it $(shell kubectl get pod -n profile-service -l app=postgres -o jsonpath='{.items[0].metadata.name}') -- psql -U profile -d profile_service -c "TRUNCATE TABLE profiles CASCADE;"
+
+test-create-profiles: ## Create test profiles
+	@echo "Creating test profiles..."
+	@chmod +x test_server_create-profiles.sh
+	@./test_server_create-profiles.sh
+
+test-update: ## Run update tests
+	@echo "Running update tests..."
+	@chmod +x test_server_update.sh
+	@./test_server_update.sh
+
+test-monitoring: ## Run monitoring and metrics tests
+	@echo "Running monitoring and metrics tests..."
+	@chmod +x test_monitoring.sh
+	@./test_monitoring.sh 

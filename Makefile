@@ -1,4 +1,4 @@
-.PHONY: all build deploy undeploy clean help start stop restart status logs test clean-all port-forward create-cluster delete-profile get-profiles test-cache logs-server clean-db test-create-profiles test-update test-monitoring
+.PHONY: all build deploy undeploy clean help start stop restart status logs test clean-all port-forward create-cluster delete-profile get-profiles test-cache logs-server clean-db test-create-profiles test-update test-monitoring scale-server-down scale-server-up
 
 # Default target
 all: help
@@ -25,6 +25,8 @@ help:
 	@echo "  make clean-db      - Clean all profiles from the database"
 	@echo "  make test-create-profiles - Create test profiles"
 	@echo "  make test-monitoring - Run monitoring and metrics tests"
+	@echo "  make scale-server-down - Scale down the server deployment"
+	@echo "  make scale-server-up - Scale up the server deployment"
 	@echo ""
 	@echo "Note: All cluster management operations are centralized in this Makefile"
 
@@ -38,6 +40,11 @@ create-cluster:
 	else \
 		echo "Kind cluster 'profile-service' already exists."; \
 	fi
+
+delete-cluster:
+	@echo "Deleting Kind cluster..."
+	@kind delete cluster --name profile-service || true
+	@echo "Kind cluster deleted successfully!"
 
 # Cleanup targets
 clean:
@@ -155,4 +162,10 @@ test-update: ## Run update tests
 test-monitoring: ## Run monitoring and metrics tests
 	@echo "Running monitoring and metrics tests..."
 	@chmod +x test_monitoring.sh
-	@./test_monitoring.sh 
+	@./test_monitoring.sh
+
+scale-server-down:
+	kubectl scale deployment/profile-server --replicas=2 -n profile-service
+
+scale-server-up:
+	kubectl scale deployment/profile-server --replicas=5 -n profile-service 

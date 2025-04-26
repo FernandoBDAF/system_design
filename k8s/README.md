@@ -20,6 +20,8 @@ This directory contains all Kubernetes configurations for the profile service ap
     - Readiness probe: 30s initial delay, 10s period, 5s timeout
   - `kind-config.yaml` - Kind cluster configuration with port mappings
   - `kustomization.yaml` - Kustomize configuration for managing all resources
+  - `metrics-server.yaml` - Core metrics-server deployment and RBAC configuration
+  - `metrics-server-apiservice.yaml` - APIService registration for metrics API
 
 - `old-code-just-for-reference/` - Previous implementation for reference
   - Contains valuable insights and configurations from previous iterations
@@ -124,6 +126,61 @@ After deployment, services are accessible at:
 - Redis: redis://localhost:6379
 - RabbitMQ: amqp://localhost:5672
 - RabbitMQ UI: http://localhost:15672
+
+## Monitoring and Metrics
+
+The cluster includes metrics-server for real-time resource monitoring capabilities:
+
+### Metrics Server Configuration
+
+Located in `simple/` directory:
+
+- `metrics-server.yaml` - Core metrics-server deployment and RBAC configuration
+- `metrics-server-apiservice.yaml` - APIService registration for metrics API
+
+Key components:
+
+1. Metrics Server Deployment:
+
+   - Image: k8s.gcr.io/metrics-server/metrics-server:v0.7.0
+   - Insecure TLS for development (--kubelet-insecure-tls)
+   - Service account with necessary RBAC permissions
+   - Exposed on port 4443 internally
+
+2. API Registration:
+   - APIService: v1beta1.metrics.k8s.io
+   - Enables metrics API endpoints
+   - Allows resource metrics collection
+
+### Available Metrics Commands
+
+Monitor cluster resources in real-time:
+
+```bash
+# View node resource usage
+kubectl top nodes
+
+# View pod resource usage
+kubectl top pods [-n namespace]
+
+# View specific pod metrics
+kubectl top pod [pod-name] [-n namespace]
+```
+
+These commands provide real-time data about:
+
+- CPU usage (cores and percentage)
+- Memory usage (bytes and percentage)
+- Per-node and per-pod resource utilization
+
+### Resource Monitoring Integration
+
+The metrics-server enables:
+
+- Horizontal Pod Autoscaling (HPA)
+- Resource quota monitoring
+- Real-time resource utilization tracking
+- Performance optimization insights
 
 ## Future Improvements
 

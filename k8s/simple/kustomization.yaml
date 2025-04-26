@@ -12,3 +12,4 @@ resources:
   - server.yaml
   - worker.yaml
   - client.yaml
+  - metrics-server.yaml

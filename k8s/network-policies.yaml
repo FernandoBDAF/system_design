@@ -1,0 +1,81 @@
+# Allow client to server communication
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-client-to-server
+  namespace: server-layer
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              layer: frontend
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# Allow server to data communication
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-server-to-data
+  namespace: data-layer
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              layer: application
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+---
+# Allow all to observability
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-all-to-observability
+  namespace: observability-layer
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 9090
+        - protocol: TCP
+          port: 3000
+---
+# Allow server to RabbitMQ communication
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-server-to-rabbitmq
+  namespace: server-layer
+spec:
+  podSelector:
+    matchLabels:
+      app: server
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 5672
+        - protocol: TCP
+          port: 15672
+      to:
+        - podSelector:
+            matchLabels:
+              app: rabbitmq

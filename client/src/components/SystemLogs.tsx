@@ -18,7 +18,7 @@ const SystemLogs: React.FC = () => {
     {
       timestamp: "2024-04-25 21:36:54",
       level: "error",
-      service: "profile-client",
+      service: "client",
       message: "Failed to connect to localhost:3000: connection refused",
     },
     {

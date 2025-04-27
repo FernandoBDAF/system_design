@@ -1,0 +1,128 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: server
+  namespace: server-layer
+  labels:
+    app: server
+    layer: application
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      protocol: TCP
+      targetPort: http
+    - name: metrics
+      port: 8081
+      protocol: TCP
+      targetPort: metrics
+  selector:
+    app: server
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: server-redis-secret
+  namespace: server-layer
+type: Opaque
+stringData:
+  password: redis
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: server
+  namespace: server-layer
+  labels:
+    app: server
+    layer: application
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: server
+  template:
+    metadata:
+      labels:
+        app: server
+        layer: application
+    spec:
+      containers:
+        - name: server
+          # Note: The image is built and loaded into the cluster using the Makefile
+          # The 'Never' policy ensures we use the local image built by 'make build'
+          image: server:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 8081
+              name: metrics
+          env:
+            - name: SERVER_PORT
+              value: "8080"
+            - name: DB_URI
+              value: "postgres://profile:profile123@postgres.data-layer.svc.cluster.local:5432/profile_service?sslmode=disable"
+            - name: DB_NAME
+              value: "profile_service"
+            - name: DB_TIMEOUT
+              value: "10s"
+            - name: REDIS_HOST
+              value: "redis.data-layer.svc.cluster.local"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: server-redis-secret
+                  key: password
+            - name: RABBITMQ_URI
+              value: "amqp://guest:guest@rabbitmq.server-layer:5672/?connection_timeout=10&retry_delay=5"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: server-hpa
+  namespace: server-layer
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: server
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50

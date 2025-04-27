@@ -1,0 +1,113 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: data-layer
+data:
+  POSTGRES_DB: profile_service
+  POSTGRES_USER: profile
+  POSTGRES_PASSWORD: profile123
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: data-layer
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: data-layer
+  labels:
+    app: postgres
+    layer: persistence
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+        layer: persistence
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-config
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-config
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - profile
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - profile
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: data-layer
+  labels:
+    app: postgres
+    layer: persistence
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: postgres
+      name: postgres
+  selector:
+    app: postgres

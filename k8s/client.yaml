@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client
+  namespace: client-layer
+  labels:
+    app: client
+    layer: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: client
+  template:
+    metadata:
+      labels:
+        app: client
+        layer: frontend
+    spec:
+      serviceAccountName: pod-reader
+      containers:
+        - name: client
+          image: client:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              value: "http://server.server-layer.svc.cluster.local:8080"
+            - name: NEXT_PUBLIC_WS_URL
+              value: "ws://server.server-layer.svc.cluster.local:8080/ws"
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: KUBERNETES_SERVICE_HOST
+              value: "kubernetes.default.svc"
+            - name: KUBERNETES_SERVICE_PORT
+              value: "443"
+          volumeMounts:
+            - name: kube-api-access
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+      volumes:
+        - name: kube-api-access
+          projected:
+            sources:
+              - serviceAccountToken:
+                  expirationSeconds: 3600
+                  path: token
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
+              - downwardAPI:
+                  items:
+                    - path: namespace
+                      fieldRef:
+                        fieldPath: metadata.namespace
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: client
+  namespace: client-layer
+  labels:
+    app: client
+    layer: frontend
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 3000
+      targetPort: http
+  selector:
+    app: client

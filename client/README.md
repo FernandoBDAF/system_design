@@ -1,334 +1,458 @@
 # Profile Service Client
 
-## How to Use This Document
+// find a better position in the text to place the text bellow, and make
+// make connection with other topics
+// do this bellow to any of the foundational docs at ./docs??
 
-This README is structured to help developers, operators, and contributors quickly understand, use, and extend the Profile Service Client. Each section is focused on a specific aspect of the project:
+## Layer-Based Namespace Model (System Visualization)
 
-- **Development & Usage:** How to run, build, and develop the client locally and in production.
-- **Kubernetes Deployment:** How the client is deployed and managed in a Kubernetes environment, including Makefile usage.
-- **Architecture & Technical Decisions:** The rationale behind major technical and integration choices, including frontend stack, API integration, Kubernetes alignment, Docker/build pipeline, and how the client fits with the rest of the system.
-- **Monitoring & Observability:** How the client supports operational visibility, including Prometheus, Grafana, and real-time metrics.
-- **Troubleshooting:** Common issues and their solutions for both development and production environments.
-- **Learn More:** Resources for learning about Next.js and related technologies.
+**Namespaces (Layers):**
 
-When adding new information, please:
+- `client-layer`: Frontend components (e.g., client)
+- `server-layer`: Application services (e.g., server, worker, rabbitmq)
+- `data-layer`: Databases and caches (e.g., postgresql, redis)
+- `observability-layer`: Monitoring and metrics (e.g., prometheus, grafana, metrics-server)
 
-- Place usage instructions in the appropriate section (Development, Deployment, etc.).
-- Document new technical decisions or architectural changes in the "Architecture & Technical Decisions" section.
-- Add new troubleshooting tips to the Troubleshooting section.
-- Keep the structure consistent for easy navigation.
+Each component is deployed in its relevant namespace, and network policies/RBAC are set up to control cross-layer communication. This model provides:
 
----
+- Security and resource isolation
+- Organizational clarity
+- Easier visualization and troubleshooting
 
-## Project Configuration (Next.js 15 + Tailwind CSS v4)
+**Visualization Model:**
 
-This project is built with the latest **Next.js 15 App Router** and **Tailwind CSS v4**, providing a modern, scalable, and fast development experience. Below are the key configuration details and nuances that make this setup robust and future-proof:
+- Each namespace is rendered as a horizontal layer in the system diagram.
+- Pods are grouped by deployment within each namespace (using labels like `app` and `deployment`).
+- Standalone pods (not part of a deployment) are shown as individual circles in their namespace.
+- Pod-to-pod connections are visualized as lines, including cross-namespace connections (future improvements may enhance this logic).
+- For clarity, the visualization will limit the number of elements in a horizontal line (e.g., 4 per row) to avoid crowding.
+- Short names and CPU% metrics are shown for relevant pods.
+- Only pods from these four namespaces are visualized; system/default namespaces are excluded.
 
-### Key Configuration Highlights
+**Connection Logic:**
 
-- **Next.js 15 App Router**: All routing, layouts, and server/client components are managed in `src/app/` using the new App Router paradigm. This enables advanced routing, layouts, and React Server Components.
-- **Turbopack**: Uses Turbopack (the new default build tool in Next.js 15) for faster builds and hot module replacement.
-- **TypeScript**: The project is fully typed, including configuration files, for safety and maintainability.
-- **Tailwind CSS v4**:
-  - Uses the new `@tailwindcss/postcss` plugin (required for Turbopack/Next.js 15+).
-  - Global styles are imported with a single `@import "tailwindcss";` in `src/app/globals.css`.
-  - No need for `@tailwind base;`, `@tailwind components;`, or `@tailwind utilities;` in Tailwind v4+ with Turbopack.
-  - The `tailwind.config.ts` file is written in TypeScript and all customizations (colors, animations, etc.) are under `theme.extend`.
-  - The `content` array is set to `./src/**/*.{js,ts,jsx,tsx,mdx}` to ensure all files are scanned for Tailwind classes.
-- **PostCSS Configuration**:
-  - The `postcss.config.mjs` file uses the array syntax: `plugins: ["@tailwindcss/postcss"]`.
-  - No need for `autoprefixer` or the object syntax with Turbopack.
-- **Directory Structure**:
-  - All code is organized under `src/` for clarity and maintainability.
-  - Key folders: `app/` (routing, layouts, pages, API), `components/` (reusable React components), `hooks/`, `lib/`, and `types/`.
-- **Custom Theming**:
-  - Custom colors and theming are handled via CSS variables and referenced in `tailwind.config.ts`.
-  - Animations and other utilities are added via plugins like `tailwindcss-animate`.
-- **Dark Mode**:
-  - Enabled via `darkMode: "class"` for full control.
-- **Best Practices**:
-  - Always restart the dev server after config changes.
-  - Avoid dynamic class names; Tailwind only generates classes it can statically find in your code.
-  - Import global CSS only in `layout.tsx`.
-  - Use a single global CSS file (e.g., `globals.css` in `src/app/`).
+- The current implementation uses a simple, static approach for pod-to-pod connections.
+- In the future, connection logic may be dynamically generated from service definitions, network policies, or observed traffic.
 
-### Troubleshooting & Nuances
+**Legend/Key:**
 
-- If styles don't show up, check your `postcss.config.mjs` and `tailwind.config.ts` for typos, and ensure you restarted the dev server.
-- If only some classes work, check for typos or dynamic class names.
-- Delete `.next`, `node_modules`, and `package-lock.json` and reinstall if needed.
-- For more details, see the [Tailwind Next.js Guide](https://tailwindcss.com/docs/installation/framework-guides/nextjs).
+- The visualization may include a legend or key in the future to clarify the meaning of shapes, colors, and line styles, as the model evolves.
 
----
+## System Visualization Model
+
+- **Namespace Layers:** Each Kubernetes namespace is rendered as a horizontal layer in the visualization. This includes all namespaces (e.g., `profile-service`, `kube-system`, `default`).
+- **Deployment Grouping:** Within each namespace, pods belonging to the same deployment are grouped under a load balancer (square). These pods are shown as a horizontal sublayer below the load balancer.
+- **Standalone Pods:** Pods not part of a deployment are shown as individual circles in the namespace layer.
+- **Short Names & Metrics:** Each pod displays a short name below the circle. If CPU% metrics are available, they are shown inside the pod; otherwise, no value is shown.
+- **Connections:** All pod-to-pod connections are visualized as light lines, regardless of namespace or deployment.
+- **Data Fetching:** The backend fetches all pods and metrics from all namespaces. Metrics are only displayed if available for a pod (e.g., `server` pods). Others show nothing for CPU%.
+- **Mock Data Fallback:** If real data cannot be fetched, the UI falls back to mock data with a warning banner. Mock data follows the same grouping and layout conventions.
+- **Naming & Labeling:** Grouping and deployment membership are determined by Kubernetes labels (e.g., `app`, `deployment`), not just name patterns. Consistent labeling in YAML manifests is required for correct visualization.
+
+### Pod-to-Pod Connections
+
+- **Connection Data Source:**
+  - The `connections` array is provided to the frontend and describes logical or observed relationships between pods (e.g., network calls, service dependencies, or traffic flows).
+  - **By default, this array is not directly retrieved from the Kubernetes API.**
+  - It may be generated by backend logic, inferred from service configuration, or statically defined for the visualization.
+- **Visualization Rule:**
+  - For each connection `{ source, target }`, a light line is drawn from the source pod to the target pod, regardless of namespace or deployment.
+  - All connections in the array are visualized, even if they cross namespaces or deployment groups.
+- **Extensibility:**
+  - The model supports future enhancements, such as coloring or weighting connections by type, value, or observed traffic.
+
+## Design Principles
+
+- **System design diagram style:** The visualization aims to resemble a system design diagram, with clear grouping by namespace and deployment, and all relevant connections shown.
+- **Extensible:** The model supports future expansion (e.g., more metrics, custom groupings, filtering by namespace).
+- **Consistent:** Both real and mock data use the same grouping and layout logic for a seamless experience.
+
+## Overview & Purpose
+
+The Profile Service Client is a web-based dashboard for real-time monitoring and management of the Profile Service. It provides a user-friendly interface for viewing system metrics, managing traffic, and monitoring service health.
+
+## Documentation Principles
+
+This component follows the project's documentation principles:
+
+1. **Conceptual Clarity**
+
+   - Clear component descriptions
+   - Consistent terminology
+   - Logical organization
+   - Configuration examples
+   - Progressive disclosure
+
+2. **Lessons Learned**
+
+   - Operational insights
+   - Best practices
+   - Common pitfalls
+   - Security considerations
+   - Performance guidelines
+
+3. **Configuration & Guardrails**
+
+   - Resource limits
+   - Security settings
+   - Health checks
+   - Deployment patterns
+   - Monitoring setup
+
+4. **Troubleshooting Tips**
+
+   - Common issues
+   - Recovery steps
+   - Diagnostic commands
+   - Log analysis
+   - Performance debugging
+
+5. **Consistency**
+   - Uniform formatting
+   - Standard terminology
+   - Clear structure
+   - Regular updates
+   - Cross-references
+
+For detailed documentation principles and guidelines, see [Documentation Principles](../docs/principles.md).
+
+## Related Documentation
+
+For more detailed information about specific aspects of the client implementation, see:
+
+- [API Documentation](../docs/api.md) - API endpoints and integration
+- [Caching Implementation](../docs/caching.md) - Cache configuration and optimization
+- [Monitoring Setup](../docs/monitoring.md) - Monitoring and metrics configuration
+- [Testing Procedures](../docs/testing.md) - Testing and validation procedures
+
+## Architecture & Main Flows
+
+### Core Components
+
+1. **Frontend Layer**
+
+   - Next.js 15 App Router
+   - TypeScript for type safety
+   - Tailwind CSS v4 for styling
+   - D3.js for system visualization
+
+2. **Backend Layer**
+
+   - Next.js API Routes
+   - Kubernetes client integration
+   - Metrics collection and enrichment
+   - WebSocket support for real-time updates
+
+3. **Integration Layer**
+   - Service account token management
+   - RBAC for metrics access
+   - Environment variable configuration
+   - Health check implementation
+
+### Data Flows
+
+1. **Metrics Collection**
+
+   ```
+   Client Pod (pod-reader SA) → Metrics API → Metrics Server → Enriched Data → UI
+   ```
+
+2. **System Visualization**
+
+   ```
+   Pod Status → D3.js Layout → Interactive UI → Real-time Updates
+   ```
+
+3. **Error Handling**
+   ```
+   API Error → Fallback Logic → Mock Data → Warning Banner
+   ```
+
+## Configuration & Guardrails
+
+### Required Environment Variables
+
+- `NEXT_PUBLIC_API_URL`: Profile service API URL (default: http://profile-service:8080)
+- `NAMESPACE`: Kubernetes namespace (default: profile-service)
+- `RETRY_INTERVAL`: Connection retry interval (default: 5000ms)
+- `MAX_RETRY_ATTEMPTS`: Maximum retry attempts (default: 3)
+
+### Resource Limits & Health Checks
+
+- Memory: 256Mi request, 512Mi limit
+- CPU: 200m request, 500m limit
+- Liveness probe: 60s initial delay, 15s period, 5s timeout
+- Readiness probe: 30s initial delay, 10s period, 5s timeout
+
+### Guardrails: What Must Not Change
+
+1. **Security Settings**
+
+   - Do not remove service account token mounts
+   - Do not weaken RBAC permissions
+   - Do not expose Kubernetes API to browser
+
+2. **Resource Management**
+
+   - Do not remove resource limits
+   - Do not disable health checks
+   - Do not increase probe timeouts beyond 5s
+
+3. **Development Practices**
+   - Always use TypeScript for new code
+   - Always run linting before commits
+   - Always test fallback mechanisms
 
 ## Features
 
-- Real-time pod monitoring and status display
-- Profile management interface
-- Cache status visualization
-- Task monitoring
-- Integration with Prometheus and Grafana
-- Traffic simulation and system adaptation visualization
-- Real-time connection status monitoring
-- Graceful error handling and recovery
-
-## UI Components and Features
-
-### 1. Traffic Control Panel
-
-- Request rate control (RPS)
-- Request type selection (GET/POST/PUT/DELETE)
-- Payload size configuration
-- Error rate injection
-- Preset scenarios:
-  - Traffic spike simulation
-  - Gradual increase/decrease
-  - Random traffic patterns
-- Real-time feedback on connection status
-- Error state handling with automatic retry
-
-### 2. System Visualization
+### 1. System Visualization
 
 - Real-time pod status display
-- Traffic flow visualization
-- Resource usage indicators
-- Health status monitoring
-- Connection strength visualization
-- Force-directed layout for pod arrangement
-- Scaling event animations
-- Visual feedback for system state:
-  - Connected state (green indicator)
-  - Connecting state (yellow pulsing indicator)
-  - Error state (red indicator with warning message)
-- Graceful degradation during connection issues
+- CPU/Memory usage indicators
+- Deployment grouping
+- Connection visualization
+- Status indicators
+- Mock data fallback
+
+### 2. Traffic Control
+
+- Request rate control
+- Request type selection
+- Payload configuration
+- Error rate injection
+- Preset scenarios
+- Real-time feedback
 
 ### 3. Metrics Dashboard
 
-- Real-time metrics display:
-  - CPU/Memory usage per pod
-  - Request latency
-  - Error rates
-  - Scaling events
-  - Queue lengths
-- Historical data visualization
-- Alert indicators
-- Loading states with skeleton UI
-- Error boundary handling
-- Connection status integration
-
-## Connection Status Features
-
-The dashboard now includes comprehensive connection status monitoring:
-
-- Visual status indicator in the navigation bar
-- Color-coded status indicators:
-  - Green: Connected and healthy
-  - Yellow (pulsing): Connecting/reconnecting
-  - Red: Connection error
-- Error messages with context
-- Automatic reconnection attempts
-- Graceful UI degradation during outages
-- Loading states during transitions
-
-## Error Handling
-
-The client implements robust error handling:
-
-- Visual feedback for connection issues
-- Graceful degradation of functionality
-- Automatic retry mechanisms
-- User-friendly error messages
-- Component-level error boundaries
-- Loading states during recovery
-- Skeleton UI during data fetching
-
-## Kubernetes Integration
-
-The client is designed to run in a Kubernetes environment and includes:
-
-- Service account configuration for pod monitoring
-- RBAC permissions to read pod information
-- Environment variable configuration for service discovery
-- Health checks and resource limits:
-  - Memory: 512Mi limit, 256Mi request
-  - CPU: 500m limit, 200m request
-  - Liveness probe: 60s initial delay, 15s period, 5s timeout
-  - Readiness probe: 30s initial delay, 10s period, 5s timeout
-
-## Access Methods
-
-The client can be accessed in two ways:
-
-1. **Port Forwarding** (Development):
-
-   ```bash
-   make port-forward
-   ```
-
-   Then access at: http://localhost:3000
-
-2. **NodePort** (Direct Cluster Access):
-   Access at: http://localhost:30030
-
-## Environment Variables
-
-- `NEXT_PUBLIC_API_URL`: URL of the profile service API (default: http://profile-service:8080)
-- `NAMESPACE`: Kubernetes namespace for pod monitoring (default: profile-service)
-- `RETRY_INTERVAL`: Interval for connection retry attempts (default: 5000)
-- `MAX_RETRY_ATTEMPTS`: Maximum number of retry attempts (default: 3)
-
-## Development
-
-```bash
-# Start development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Start production server
-npm start
-```
-
-## Kubernetes Deployment
-
-The client is deployed as part of the profile service stack using the Makefile:
-
-```bash
-# Build and deploy everything
-make start
-
-# View logs
-make logs COMPONENT=client
-
-# Check connection status
-make check-connection
-```
-
-## Architecture & Technical Decisions
-
-### 1. Frontend Stack: Next.js 15 + TypeScript + Tailwind CSS
-
-- **Next.js 15**: Chosen for its modern React features (App Router, Server Components, Turbopack), fast builds, and suitability for real-time dashboards.
-- **TypeScript**: Enforced strict typing for maintainability and reliability across the codebase.
-- **Tailwind CSS v4**: Utility-first CSS for rapid prototyping and easy theming.
-- **D3.js**: Used for custom, dynamic system visualizations.
-
-### 2. API Integration & Data Flow
-
-- **Next.js API Routes**: Used for secure, server-side integration with Kubernetes (via `@kubernetes/client-node`). This allows the frontend to fetch real-time cluster state without exposing the K8s API to the browser.
-- **Type-Safe Data**: All API routes and data transformations use explicit types (e.g., `Pod`, `Link`, Kubernetes types) for safety and clarity.
-- **Mock Data Fallback**: If the cluster API is unavailable, the UI falls back to mock data and alerts the user, ensuring the dashboard is always usable.
-
-### 3. Kubernetes Alignment
-
-- **Namespace & Service Discovery**: All components (client, server, worker) use the same `profile-service` namespace for easy service discovery and RBAC.
-- **Resource Limits & Probes**: Deployments use resource requests/limits and health/readiness probes for robust operation in K8s.
-- **RBAC & Service Accounts**: The client uses a service account with read-only permissions for pod monitoring, following least-privilege principles.
-- **Deployment via Kustomize**: All manifests are managed in `k8s/simple/` and deployed via `kubectl apply -k`, ensuring consistency and easy overlays.
-
-### 4. Docker & Build Pipeline
-
-- **Monorepo-Friendly Dockerfile**: The Dockerfile is designed to work from the monorepo root, copying only the client folder for builds.
-- **Pre-Build Lint & Type-Check**: Linting and type-checking are run before the production build to catch errors early.
-- **Non-root User**: The Docker image runs as a non-root user for security.
-- **kubectl in Image**: The client image includes `kubectl` for in-cluster API access and debugging.
-
-### 5. Integration with Other Project Parts
-
-- **Consistent API Contracts**: The client expects the same API endpoints and data shapes as the server exposes, ensuring seamless integration.
-- **Shared Environment Variables**: All services use environment variables for configuration, making it easy to align settings across `client`, `server`, and `k8s`.
-- **Makefile Orchestration**: The Makefile centralizes cluster management, build, and deployment for all components, ensuring reproducibility and ease of use.
-
-### 6. Monitoring & Observability
-
-- **Prometheus & Grafana**: The stack includes Prometheus and Grafana for metrics and dashboards, with the client providing links and integration points.
-- **Real-Time Metrics**: The client fetches and visualizes real-time metrics, pod status, and logs, supporting operational visibility.
-
-### 7. Error Handling & Resilience
-
-- **Graceful Degradation**: The UI always shows something useful, even if the backend or cluster is down.
-- **Automatic Retry & Status Indicators**: Connection status is always visible, and the client retries failed API calls.
-
-### 8. Dependency Management & Compatibility
-
-- **React Version and Peer Dependencies:**
-  The project uses React 19, but some dependencies require React 18. The Dockerfile uses `npm install --legacy-peer-deps` to resolve these conflicts. This enables use of the latest React features, but contributors should monitor for compatibility issues and be ready to downgrade if needed.
-
-### 9. Dockerfile Build Order
-
-- **Source Code Copy Before Lint/Type-Check:**
-  The Dockerfile copies all source files before running lint and type-check steps, ensuring static analysis tools have access to the full codebase and preventing build errors.
-
-### 10. Mock Data Handling in React
-
-- **useMemo for Mock Data:**
-  Mock data is wrapped in `useMemo` to avoid unnecessary re-creation and to comply with React's linting rules, ensuring stable and efficient component behavior.
-
-### 11. Error Handling Philosophy
-
-- **Graceful Fallbacks:**
-  The UI always provides feedback, even if the backend is down, by falling back to mock data and alerting the user.
-
-### 12. Build & Linting in CI/CD
-
-- **Pre-Build Linting and Type-Checking:**
-  Linting and type-checking are enforced in the Docker build, ensuring only high-quality code is deployed.
-
-### 13. Next.js Standalone Output for Docker
-
-- **Standalone Output Mode:**
-  The project uses Next.js's `output: 'standalone'` mode (set in `next.config.ts`). This generates a minimal `.next/standalone` directory for production, which is copied into the Docker image. This approach reduces image size and ensures all required files are included for deployment. If you change the output mode, you must also update the Dockerfile accordingly.
-
----
-
-## Monitoring
-
-The client provides access to:
-
-- Prometheus metrics at http://prometheus-service:9090
-- Grafana dashboards at http://grafana-service:3000
-- Real-time system metrics and visualization
-- Traffic simulation results
+- Resource usage tracking
+- Request latency monitoring
+- Error rate visualization
 - Scaling event history
-- Connection status monitoring
-- Error rate tracking
+- Alert indicators
+- Loading states
 
-Note: These URLs are accessible within the Kubernetes cluster. For external access, use port forwarding or configure an ingress controller.
+## Lessons Learned
 
-## Troubleshooting
+### Development Insights
 
-Common issues and solutions:
+1. **Frontend Architecture**
 
-1. **Connection Refused**
+   - Next.js App Router improves performance
+   - TypeScript prevents runtime errors
+   - Tailwind CSS enables rapid development
+   - D3.js requires careful state management
 
-   - Check if the pod is running: `kubectl get pods -n profile-service`
-   - Verify port forwarding: `kubectl port-forward -n profile-service deployment/profile-client 3000:3000`
-   - Check service logs: `kubectl logs -n profile-service deployment/profile-client`
+2. **Kubernetes Integration**
 
-2. **Service Unavailable**
+   - RBAC is critical for metrics access
+   - Service account tokens must be properly mounted
+   - Health checks prevent cascading failures
+   - Resource limits prevent OOM issues
 
-   - Verify service status: `kubectl get svc -n profile-service`
-   - Check endpoints: `kubectl get endpoints -n profile-service`
-   - Ensure correct namespace: `kubectl config set-context --current --namespace=profile-service`
+3. **Error Handling**
+   - Always implement fallback mechanisms
+   - Provide clear user feedback
+   - Log errors for debugging
+   - Test error scenarios thoroughly
 
-3. **UI Not Updating**
+## Troubleshooting Guide
+
+### Common Issues & Solutions
+
+1. **Connection Issues**
+
+   - Check service account configuration
+   - Verify RBAC permissions
+   - Check metrics-server status
+   - Command: `kubectl top pods`
+
+2. **UI Problems**
+
    - Clear browser cache
    - Check WebSocket connection
    - Verify API endpoints
-   - Monitor browser console for errors
+   - Monitor browser console
 
-## Learn More
+3. **Performance Issues**
+   - Check resource usage
+   - Verify cache hit rates
+   - Monitor WebSocket connections
+   - Check database queries
 
-To learn more about Next.js, take a look at the following resources:
+### Quick Recovery Steps
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. **Basic Checks**
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+   ```bash
+   make status          # Check component status
+   make logs            # View component logs
+   kubectl top pods     # Check resource usage
+   ```
 
-## Deploy on Vercel
+2. **Common Fixes**
+   ```bash
+   make restart         # Restart the client
+   make clean-all       # Clean and start fresh
+   make start          # Rebuild and deploy
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Development & Usage
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Prerequisites
+
+- Node.js 18+
+- Docker
+- Kubernetes (Kind)
+- kubectl
+- make
+
+### Development Workflow
+
+1. **Local Development**
+
+```bash
+   npm install         # Install dependencies
+   npm run dev        # Start development server
+   npm run build      # Build for production
+   npm start         # Start production server
+```
+
+2. **Kubernetes Deployment**
+
+```bash
+   make build         # Build Docker image
+   make start         # Deploy to cluster
+   make status        # Verify deployment
+```
+
+3. **Monitoring & Debugging**
+   ```bash
+   make logs          # View logs
+   make port-forward  # Access services
+   ```
+
+### Access Points
+
+- Development: http://localhost:3000
+- Production: http://localhost:30030
+- Metrics: http://localhost:9090
+- Grafana: http://localhost:3001
+
+## Directory Structure
+
+```
+client/
+├── src/              # Source code
+│   ├── app/         # Next.js App Router
+│   ├── components/  # React components
+│   ├── hooks/       # Custom hooks
+│   ├── lib/         # Utility functions
+│   └── types/       # TypeScript types
+├── public/          # Static assets
+├── Dockerfile       # Container configuration
+└── package.json     # Dependencies
+```
+
+---
+
+This README follows the project's documentation principles: conceptual clarity, lessons learned, configuration/code guardrails, troubleshooting tips, and consistency. For more details, see the root README.md and k8s/README.md.
+
+## Kubernetes Cluster Requirements & Data Dependencies
+
+The frontend visualization depends on the following from the Kubernetes cluster and backend API:
+
+- **Pod Data:**
+  - Each pod must provide: name, namespace (layer), labels (e.g., app, deployment), status, deployment info, CPU/memory metrics, and a short name for display.
+  - Pods should be labeled consistently for correct grouping and visualization.
+- **Connections Array:**
+  - The backend must provide a list of logical pod-to-pod connections (can be static or generated).
+- **Namespace Model:**
+  - The cluster must use the four-layer namespace model: `client-layer`, `server-layer`, `data-layer`, `observability-layer`.
+  - Only these namespaces are visualized; system/default namespaces are ignored.
+- **Backend Access:**
+  - The backend must have access to the Kubernetes API and metrics-server to fetch pod and metrics data.
+- **Debugging & Validation:**
+  - You can use shell scripts or `kubectl` commands to inspect the cluster state and validate what the backend is receiving. See below for examples.
+
+### Example: Inspecting Cluster State with kubectl
+
+```bash
+# List all pods with labels in all relevant namespaces
+kubectl get pods -n client-layer -o wide --show-labels
+kubectl get pods -n server-layer -o wide --show-labels
+kubectl get pods -n data-layer -o wide --show-labels
+kubectl get pods -n observability-layer -o wide --show-labels
+
+# Get pod metrics (requires metrics-server)
+kubectl top pods -n client-layer
+kubectl top pods -n server-layer
+kubectl top pods -n data-layer
+kubectl top pods -n observability-layer
+
+# Get deployments and their labels
+kubectl get deployments -A -o wide --show-labels
+```
+
+## Debugging & Validation Tools
+
+To help with development and troubleshooting, the following tools are available:
+
+- **Shell Script:**
+
+  - A script (`scripts/inspect-cluster.sh`) is provided to fetch and display all relevant pod and deployment data (including labels and metrics) from the cluster using `kubectl`.
+  - You can run this script directly, or use the centralized Makefile target:
+    ```bash
+    make inspect-cluster
+    ```
+  - See the script in the `scripts/` directory for usage instructions.
+
+- **Backend Debug Endpoint:**
+  - The backend exposes a debug endpoint at `/api/debug/raw-k8s` that returns the raw pod and deployment data fetched from the Kubernetes API.
+  - This endpoint is for development and debugging only. **Do not expose it in production.**
+  - You can use this endpoint to inspect exactly what the backend is receiving from the cluster.
+
+## Centralized Command Management with Makefile
+
+All operational commands for this project are centralized in the Makefile. This provides:
+
+- A single, consistent interface for all cluster and application operations
+- Easy discoverability of available commands (run `make help`)
+- Standardization and automation of workflows
+
+**Example:**
+
+- To inspect the cluster state (pods, deployments, metrics), simply run:
+  ```bash
+  make inspect-cluster
+  ```
+  This will execute the `scripts/inspect-cluster.sh` script and print the results for all main namespaces.
+
+Refer to the Makefile for more commands and usage details.
+
+## Visual & UX Design Principles for the System Diagram
+
+The system diagram is designed with the following principles and ideas:
+
+- **Clarity & Accessibility:**
+
+  - Uses a colorblind-friendly, high-contrast palette for pod status, load balancers, and connections.
+  - Layer/namespace labels and the legend are styled for prominence and readability.
+  - All interactive elements (pods, load balancers) are accessible via keyboard and screen readers.
+
+- **Interactivity & Usability:**
+
+  - Tooltips on hover provide detailed pod and deployment information.
+  - A visual legend/key explains all shapes, colors, and lines.
+  - Mock data fallback ensures the diagram is always meaningful, even without cluster connectivity.
+
+- **Incremental, Review-Driven Improvement:**
+
+  - Visual polish and UX features are added step-by-step, with user review and feedback after each change.
+  - The design is extensible, with plans for status badges, icons, filtering, and more interactivity.
+
+- **Goal:**
+  - Make the system diagram both informative and easy to use for all stakeholders, from developers to operators.
+  - Ensure the visualization helps users quickly understand system health, structure, and relationships.
+
+For more details on the current and planned features, see the code and commit history. Further enhancements are ongoing as part of an iterative, user-centered design process.

@@ -1,0 +1,55 @@
+---
+# Role for server-layer to access observability-layer
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: observability-access
+  namespace: observability-layer
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+# Role binding for server-layer service account
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: server-layer-observability-access
+  namespace: observability-layer
+subjects:
+  - kind: ServiceAccount
+    name: server-layer
+    namespace: server-layer
+roleRef:
+  kind: Role
+  name: observability-access
+  apiGroup: rbac.authorization.k8s.io
+---
+# Role for client-layer to access server-layer
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: server-access
+  namespace: server-layer
+rules:
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch"]
+---
+# Role binding for client-layer service account
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: client-layer-server-access
+  namespace: server-layer
+subjects:
+  - kind: ServiceAccount
+    name: client-layer
+    namespace: client-layer
+roleRef:
+  kind: Role
+  name: server-access
+  apiGroup: rbac.authorization.k8s.io

@@ -53,7 +53,7 @@ const KubernetesMetrics: React.FC = () => {
           `https://kubernetes.default.svc/apis/metrics.k8s.io/v1beta1/namespaces/${namespace}/pods`,
           {
             headers: { Authorization: `Bearer ${token}` },
-            // @ts-ignore - TypeScript doesn't know about the ca property
+            // @ts-expect-error - TypeScript doesn't know about the ca property
             ca,
             rejectUnauthorized: false,
           }

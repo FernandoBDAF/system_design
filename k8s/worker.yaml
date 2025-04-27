@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: server-layer
+  labels:
+    app: worker
+    layer: application
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+        layer: application
+    spec:
+      containers:
+        - name: worker
+          image: worker:latest
+          imagePullPolicy: Never
+          env:
+            - name: RABBITMQ_URI
+              value: "amqp://rabbitmq.server-layer.svc.cluster.local:5672"
+            - name: DB_HOST
+              value: "postgres.data-layer.svc.cluster.local"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - ps aux | grep worker | grep -v grep
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - ps aux | grep worker | grep -v grep
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 3

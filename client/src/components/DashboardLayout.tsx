@@ -1,12 +1,15 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import SystemVisualization from "./SystemVisualization";
 import TrafficControlPanel from "./TrafficControlPanel";
 import PrometheusMetrics from "./PrometheusMetrics";
 import SystemLogs from "./SystemLogs";
 import type { Pod, Link } from "../app/page";
+import type { PodWithMetrics } from "../types/podWithMetrics";
+import { useClusterMetrics } from "../hooks/useClusterMetrics";
+import { mockPods } from "../lib/mockClusterData";
 
 interface DashboardLayoutProps {
-  pods: Pod[];
+  pods?: Pod[];
   connections: Link[];
   requestsPerSecond: number;
   isMockedData?: boolean;
@@ -15,13 +18,30 @@ interface DashboardLayoutProps {
 type TabType = "traffic" | "prometheus" | "logs";
 
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({
-  pods,
   connections,
   requestsPerSecond,
   isMockedData = false,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>("traffic");
   const [isLoading, setIsLoading] = useState(false);
+
+  const { data: clusterPods, loading, error } = useClusterMetrics();
+
+  // Choose which pods to use
+  const podsToUse: PodWithMetrics[] =
+    isMockedData || !clusterPods ? mockPods : clusterPods;
+
+  // Debug logs
+  useEffect(() => {
+    console.log("[DashboardLayout] Metrics state update:", {
+      hasClusterPods: !!clusterPods,
+      podCount: clusterPods?.length || 0,
+      loading,
+      error: error || null,
+      isMockedData,
+      activeTab,
+    });
+  }, [clusterPods, loading, error, isMockedData, activeTab]);
 
   const handleTabChange = (tabId: TabType) => {
     if (tabId === activeTab) return;
@@ -57,21 +77,27 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
   return (
     <div className="h-screen w-full bg-gray-100">
-      {isMockedData && (
+      {(!!error || isMockedData) && (
         <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4">
-          <strong>Warning:</strong> Using mocked data. Could not fetch real
-          cluster state.
+          <strong>Warning:</strong> Showing mocked data due to cluster metrics
+          fetch failure.
         </div>
       )}
       <div className="grid grid-cols-12 gap-4 h-full p-4">
         {/* Left section - Takes up 8/12 (2/3) of the screen */}
         <div className="col-span-8 bg-white rounded-lg shadow-sm p-4 overflow-auto">
-          <SystemVisualization
-            pods={pods}
-            connections={connections}
-            requestsPerSecond={requestsPerSecond}
-            isMockedData={isMockedData}
-          />
+          {loading ? (
+            <div className="text-gray-500 p-8 text-center">
+              Loading cluster metrics...
+            </div>
+          ) : (
+            <SystemVisualization
+              pods={podsToUse}
+              connections={connections}
+              requestsPerSecond={requestsPerSecond}
+              isMockedData={!!error || isMockedData}
+            />
+          )}
         </div>
 
         {/* Right section - Takes up 4/12 (1/3) of the screen */}

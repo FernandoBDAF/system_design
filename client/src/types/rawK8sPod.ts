@@ -1,3 +1,5 @@
+// This represents the raw pod information from the Kubernetes API
+// It is important to keep this
 export interface K8sPod {
   metadata: {
     name: string;

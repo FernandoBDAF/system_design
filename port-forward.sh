@@ -1,13 +1,20 @@
 #!/bin/bash
 
-# Function to start port forwarding in background
+# Function to start port forwarding for a service
 start_port_forward() {
-  local service=$1
-  local port=$2
-  local target_port=$3
-  echo "Forwarding $service on port $port..."
-  kubectl port-forward -n profile-service svc/$service $port:$target_port &
-  sleep 2  # Give time for the port forward to start
+    local service=$1
+    local port=$2
+    local target_port=$3
+    local namespace="profile-service"
+    local resource_type="deployment"
+
+    # Check if the service is a StatefulSet
+    if kubectl get statefulset -n $namespace $service &>/dev/null; then
+        resource_type="statefulset"
+    fi
+
+    echo "Starting port forward for $service on port $port..."
+    kubectl port-forward -n $namespace $resource_type/$service $port:$target_port &
 }
 
 # Check if ports are already in use
@@ -20,32 +27,18 @@ check_port() {
   return 0
 }
 
-# Start port forwarding for each service
-if check_port 3000; then
-  start_port_forward profile-client 3000 3000
-fi
+# Start port forwarding for all services
+start_port_forward client 3000 3000
+start_port_forward server 8080 8080
+start_port_forward worker 8081 8080
+start_port_forward postgres 5432 5432
+start_port_forward redis 6379 6379
+start_port_forward rabbitmq 5672 5672
+start_port_forward rabbitmq 15672 15672
+start_port_forward prometheus 9090 9090
+start_port_forward grafana 3001 3000
 
-if check_port 8080; then
-  start_port_forward profile-server 8080 8080
-fi
-
-if check_port 5432; then
-  start_port_forward postgres 5432 5432
-fi
-
-if check_port 6379; then
-  start_port_forward redis 6379 6379
-fi
-
-if check_port 5672; then
-  start_port_forward rabbitmq 5672 5672
-fi
-
-if check_port 15672; then
-  start_port_forward rabbitmq 15672 15672
-fi
-
-echo "Port forwarding started. Press Ctrl+C to stop all forwards."
+echo "All port forwards started. Press Ctrl+C to stop all."
 echo "Access points:"
 echo "  Client UI:     http://localhost:3000"
 echo "  Server API:    http://localhost:8080"
@@ -53,6 +46,8 @@ echo "  PostgreSQL:    postgres://profile:profile123@localhost:5432/profile_serv
 echo "  Redis:         redis://localhost:6379"
 echo "  RabbitMQ:      amqp://localhost:5672"
 echo "  RabbitMQ UI:   http://localhost:15672"
+echo "  Prometheus:    http://localhost:9090"
+echo "  Grafana:       http://localhost:3001"
 
 # Wait for Ctrl+C
 trap "kill 0" EXIT

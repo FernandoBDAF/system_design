@@ -1,316 +1,140 @@
 # Profile Service Client
 
-// find a better position in the text to place the text bellow, and make
-// make connection with other topics
-// do this bellow to any of the foundational docs at ./docs??
+## Overview & Current Status
 
-## Layer-Based Namespace Model (System Visualization)
+### Purpose
 
-**Namespaces (Layers):**
+The Profile Service Client is a web-based dashboard for real-time monitoring and management of the Profile Service, providing a user-friendly interface for system visualization, metrics monitoring, and traffic control.
 
-- `client-layer`: Frontend components (e.g., client)
-- `server-layer`: Application services (e.g., server, worker, rabbitmq)
-- `data-layer`: Databases and caches (e.g., postgresql, redis)
-- `observability-layer`: Monitoring and metrics (e.g., prometheus, grafana, metrics-server)
+### Current Status 🟢
 
-Each component is deployed in its relevant namespace, and network policies/RBAC are set up to control cross-layer communication. This model provides:
+- **Service Status**: Healthy and deployed in `client-layer` namespace
+- **Data Flow**: Real-time metrics and pod information successfully streaming
+- **UI Access**: Dashboard fully functional with all core features
+- **RBAC**: Service account permissions properly configured for cross-namespace access
 
-- Security and resource isolation
-- Organizational clarity
-- Easier visualization and troubleshooting
+### Recent Achievements ✅
 
-**Visualization Model:**
+- Successfully implemented layer-based visualization with proper pod grouping
+- Integrated with Kubernetes metrics-server for real-time resource usage
+- Implemented proper RBAC for cross-namespace access
+- Added fallback mechanisms and error handling
+- Verified pod and deployment information access
 
-- The system diagram now uses a hybrid layout:
-  - The right half of the diagram is dedicated to the `server-layer`, with its deployments and pods arranged vertically.
-  - The left half is split horizontally into three stacked sections for `client-layer`, `data-layer`, and `observability-layer`, with pods and deployments arranged horizontally within each section.
-- This layout visually emphasizes the central role of the server-layer and makes the relationships between layers clearer.
-- Pods are grouped by deployment within each namespace (using labels like `app` and `deployment`).
-- Standalone pods (not part of a deployment) are shown as individual circles in their namespace.
-- Pod-to-pod connections are visualized as lines, including cross-namespace connections (future improvements may enhance this logic).
-- For clarity, the visualization will limit the number of elements in a horizontal line (e.g., 4 per row) to avoid crowding.
-- Short names and CPU% metrics are shown for relevant pods.
-- Only pods from these four namespaces are visualized; system/default namespaces are excluded.
+## System Architecture
 
-**ASCII Diagram Example:**
+### Layer-Based Model
 
-```
-+----------------------+----------------------+
-| client-layer         |                      |
-| data-layer           |      server-layer     |
-| observability-layer  |   (vertical pods)     |
-+----------------------+----------------------+
-```
+Our system uses a four-layer namespace model for clear organization and isolation:
 
-**Connection Logic:**
-
-- The current implementation uses a simple, static approach for pod-to-pod connections.
-- In the future, connection logic may be dynamically generated from service definitions, network policies, or observed traffic.
-
-**Legend/Key:**
-
-- The visualization may include a legend or key in the future to clarify the meaning of shapes, colors, and line styles, as the model evolves.
-
-## System Visualization Model
-
-- **Namespace Layers:** Each Kubernetes namespace is rendered as a horizontal layer in the visualization. This includes all namespaces (e.g., `profile-service`, `kube-system`, `default`).
-- **Deployment Grouping:** Within each namespace, pods belonging to the same deployment are grouped under a load balancer (square). These pods are shown as a horizontal sublayer below the load balancer.
-- **Standalone Pods:** Pods not part of a deployment are shown as individual circles in the namespace layer.
-- **Short Names & Metrics:** Each pod displays a short name below the circle. If CPU% metrics are available, they are shown inside the pod; otherwise, no value is shown.
-- **Connections:** All pod-to-pod connections are visualized as light lines, regardless of namespace or deployment.
-- **Data Fetching:** The backend fetches all pods and metrics from all namespaces. Metrics are only displayed if available for a pod (e.g., `server` pods). Others show nothing for CPU%.
-- **Mock Data Fallback:** If real data cannot be fetched, the UI falls back to mock data with a warning banner. Mock data follows the same grouping and layout conventions.
-- **Naming & Labeling:** Grouping and deployment membership are determined by Kubernetes labels (e.g., `app`, `deployment`), not just name patterns. Consistent labeling in YAML manifests is required for correct visualization.
-
-### Pod-to-Pod Connections
-
-- **Connection Data Source:**
-  - The `connections` array is provided to the frontend and describes logical or observed relationships between pods (e.g., network calls, service dependencies, or traffic flows).
-  - **By default, this array is not directly retrieved from the Kubernetes API.**
-  - It may be generated by backend logic, inferred from service configuration, or statically defined for the visualization.
-- **Visualization Rule:**
-  - For each connection `{ source, target }`, a light line is drawn from the source pod to the target pod, regardless of namespace or deployment.
-  - All connections in the array are visualized, even if they cross namespaces or deployment groups.
-- **Extensibility:**
-  - The model supports future enhancements, such as coloring or weighting connections by type, value, or observed traffic.
-
-## Design Principles
-
-- **System design diagram style:** The visualization aims to resemble a system design diagram, with clear grouping by namespace and deployment, and all relevant connections shown.
-- **Extensible:** The model supports future expansion (e.g., more metrics, custom groupings, filtering by namespace).
-- **Consistent:** Both real and mock data use the same grouping and layout logic for a seamless experience.
-
-## Overview & Purpose
-
-The Profile Service Client is a web-based dashboard for real-time monitoring and management of the Profile Service. It provides a user-friendly interface for viewing system metrics, managing traffic, and monitoring service health.
-
-## Documentation Principles
-
-This component follows the project's documentation principles:
-
-1. **Conceptual Clarity**
-
-   - Clear component descriptions
-   - Consistent terminology
-   - Logical organization
-   - Configuration examples
-   - Progressive disclosure
-
-2. **Lessons Learned**
-
-   - Operational insights
-   - Best practices
-   - Common pitfalls
-   - Security considerations
-   - Performance guidelines
-
-3. **Configuration & Guardrails**
-
-   - Resource limits
-   - Security settings
-   - Health checks
-   - Deployment patterns
-   - Monitoring setup
-
-4. **Troubleshooting Tips**
-
-   - Common issues
-   - Recovery steps
-   - Diagnostic commands
-   - Log analysis
-   - Performance debugging
-
-5. **Consistency**
-   - Uniform formatting
-   - Standard terminology
-   - Clear structure
-   - Regular updates
-   - Cross-references
-
-For detailed documentation principles and guidelines, see [Documentation Principles](../docs/principles.md).
-
-## Related Documentation
-
-For more detailed information about specific aspects of the client implementation, see:
-
-- [API Documentation](../docs/api.md) - API endpoints and integration
-- [Caching Implementation](../docs/caching.md) - Cache configuration and optimization
-- [Monitoring Setup](../docs/monitoring.md) - Monitoring and metrics configuration
-- [Testing Procedures](../docs/testing.md) - Testing and validation procedures
-
-## Architecture & Main Flows
+- `client-layer`: Frontend components (e.g., dashboard client)
+- `server-layer`: Application services (e.g., API servers, workers)
+- `data-layer`: Databases and caches (e.g., PostgreSQL, Redis)
+- `observability-layer`: Monitoring tools (e.g., Prometheus, Grafana)
 
 ### Core Components
 
 1. **Frontend Layer**
 
-   - Next.js 15 App Router
+   - Next.js 15 App Router for routing and SSR
    - TypeScript for type safety
    - Tailwind CSS v4 for styling
    - D3.js for system visualization
 
-2. **Backend Layer**
+2. **Backend Integration**
 
    - Next.js API Routes
    - Kubernetes client integration
    - Metrics collection and enrichment
-   - WebSocket support for real-time updates
+   - Real-time updates via WebSocket
 
-3. **Integration Layer**
+3. **Kubernetes Integration**
    - Service account token management
    - RBAC for metrics access
-   - Environment variable configuration
+   - Cross-namespace communication
    - Health check implementation
-
-### Data Flows
-
-1. **Metrics Collection**
-
-   ```
-   Client Pod (pod-reader SA) → Metrics API → Metrics Server → Enriched Data → UI
-   ```
-
-2. **System Visualization**
-
-   ```
-   Pod Status → D3.js Layout → Interactive UI → Real-time Updates
-   ```
-
-3. **Error Handling**
-   ```
-   API Error → Fallback Logic → Mock Data → Warning Banner
-   ```
-
-## Configuration & Guardrails
-
-### Required Environment Variables
-
-- `NEXT_PUBLIC_API_URL`: Profile service API URL (default: http://profile-service:8080)
-- `NAMESPACE`: Kubernetes namespace (default: profile-service)
-- `RETRY_INTERVAL`: Connection retry interval (default: 5000ms)
-- `MAX_RETRY_ATTEMPTS`: Maximum retry attempts (default: 3)
-
-### Resource Limits & Health Checks
-
-- Memory: 256Mi request, 512Mi limit
-- CPU: 200m request, 500m limit
-- Liveness probe: 60s initial delay, 15s period, 5s timeout
-- Readiness probe: 30s initial delay, 10s period, 5s timeout
-
-### Guardrails: What Must Not Change
-
-1. **Security Settings**
-
-   - Do not remove service account token mounts
-   - Do not weaken RBAC permissions
-   - Do not expose Kubernetes API to browser
-
-2. **Resource Management**
-
-   - Do not remove resource limits
-   - Do not disable health checks
-   - Do not increase probe timeouts beyond 5s
-
-3. **Development Practices**
-   - Always use TypeScript for new code
-   - Always run linting before commits
-   - Always test fallback mechanisms
 
 ## Features
 
 ### 1. System Visualization
 
-- Real-time pod status display
-- CPU/Memory usage indicators
-- Deployment grouping
-- Connection visualization
-- Status indicators
-- Mock data fallback
+- Real-time pod status and metrics display
+  - Accurate pod status based on container state
+  - Warning status for waiting/not-ready containers
+  - Error status for CrashLoopBackOff
+  - CPU usage as percentage of pod's resource limit
+- Deployment and StatefulSet grouping
+  - Load balancer visualization for deployments
+  - Proper grouping based on deployment ownership
+  - Clear distinction between deployment and standalone pods
+- Layer-based organization
+  - Four distinct layers: client, server, data, observability
+  - Visual separation and clear labeling
+  - Proper namespace mapping
+- Pod-to-pod connections
+- Status indicators and tooltips
 
 ### 2. Traffic Control
 
-- Request rate control
+- Request rate adjustment (RPS)
 - Request type selection
-- Payload configuration
+- Payload size configuration
 - Error rate injection
-- Preset scenarios
-- Real-time feedback
+- Preset testing scenarios
 
 ### 3. Metrics Dashboard
 
-- Resource usage tracking
+- CPU and memory usage tracking
 - Request latency monitoring
 - Error rate visualization
-- Scaling event history
-- Alert indicators
-- Loading states
+- Pod status tracking
+- Real-time updates
 
-## Lessons Learned
+## Configuration
 
-### Development Insights
+### Environment Variables
 
-1. **Frontend Architecture**
+\`\`\`bash
 
-   - Next.js App Router improves performance
-   - TypeScript prevents runtime errors
-   - Tailwind CSS enables rapid development
-   - D3.js requires careful state management
+# Required Configuration
 
-2. **Kubernetes Integration**
+NEXT_PUBLIC_API_URL=http://profile-service:8080 # Profile service API URL
+NAMESPACE=profile-service # Default namespace
+KUBERNETES_SERVICE_HOST # K8s API server host
+KUBERNETES_SERVICE_PORT=443 # K8s API server port
 
-   - RBAC is critical for metrics access
-   - Service account tokens must be properly mounted
-   - Health checks prevent cascading failures
-   - Resource limits prevent OOM issues
+# Optional Settings
 
-3. **Error Handling**
-   - Always implement fallback mechanisms
-   - Provide clear user feedback
-   - Log errors for debugging
-   - Test error scenarios thoroughly
+RETRY_INTERVAL=5000 # Retry interval (ms)
+MAX_RETRY_ATTEMPTS=3 # Maximum retry attempts
+\`\`\`
 
-## Troubleshooting Guide
+### Resource Limits
 
-### Common Issues & Solutions
+\`\`\`yaml
+resources:
+requests:
+memory: "256Mi"
+cpu: "200m"
+limits:
+memory: "512Mi"
+cpu: "500m"
+\`\`\`
 
-1. **Connection Issues**
+### Health Checks
 
-   - Check service account configuration
-   - Verify RBAC permissions
-   - Check metrics-server status
-   - Command: `kubectl top pods`
+\`\`\`yaml
+livenessProbe:
+initialDelaySeconds: 60
+periodSeconds: 15
+timeoutSeconds: 5
+readinessProbe:
+initialDelaySeconds: 30
+periodSeconds: 10
+timeoutSeconds: 5
+\`\`\`
 
-2. **UI Problems**
-
-   - Clear browser cache
-   - Check WebSocket connection
-   - Verify API endpoints
-   - Monitor browser console
-
-3. **Performance Issues**
-   - Check resource usage
-   - Verify cache hit rates
-   - Monitor WebSocket connections
-   - Check database queries
-
-### Quick Recovery Steps
-
-1. **Basic Checks**
-
-   ```bash
-   make status          # Check component status
-   make logs            # View component logs
-   kubectl top pods     # Check resource usage
-   ```
-
-2. **Common Fixes**
-   ```bash
-   make restart         # Restart the client
-   make clean-all       # Clean and start fresh
-   make start          # Rebuild and deploy
-   ```
-
-## Development & Usage
+## Development
 
 ### Prerequisites
 
@@ -320,189 +144,163 @@ For more detailed information about specific aspects of the client implementatio
 - kubectl
 - make
 
-### Development Workflow
+### Quick Start
 
-1. **Local Development**
+\`\`\`bash
 
-```bash
-   npm install         # Install dependencies
-   npm run dev        # Start development server
-   npm run build      # Build for production
-   npm start         # Start production server
-```
+# Local Development
 
-2. **Kubernetes Deployment**
+npm install # Install dependencies
+npm run dev # Start development server
 
-```bash
-   make build         # Build Docker image
-   make start         # Deploy to cluster
-   make status        # Verify deployment
-```
+# Production Build
 
-3. **Monitoring & Debugging**
-   ```bash
-   make logs          # View logs
-   make port-forward  # Access services
-   ```
+npm run build # Build for production
+npm start # Start production server
+
+# Kubernetes Deployment
+
+make build # Build Docker image
+make start # Deploy to cluster
+make status # Verify deployment
+\`\`\`
 
 ### Access Points
 
 - Development: http://localhost:3000
-- Production: http://localhost:30030
+- Production: Via LoadBalancer
 - Metrics: http://localhost:9090
 - Grafana: http://localhost:3001
 
-## Directory Structure
+## Troubleshooting
 
-```
+### Common Issues
+
+1. **Mock Data Showing Instead of Real Data**
+
+   - Verify service account permissions
+   - Check metrics-server status
+   - Validate network policies
+
+   ```bash
+   kubectl auth can-i list pods --as=system:serviceaccount:client-layer:client-layer
+   kubectl get --raw /apis/metrics.k8s.io/v1beta1/pods
+   ```
+
+2. **Visualization Issues**
+
+   - Clear browser cache
+   - Check browser console for errors
+   - Verify WebSocket connection
+   - Review pod labels and grouping
+   - Verify pod status accuracy:
+     ```bash
+     # Check actual pod status
+     kubectl get pods -A -o wide
+     # Check container status details
+     kubectl describe pod <pod-name> -n <namespace>
+     ```
+   - Verify deployment ownership:
+     ```bash
+     # Check pod ownership
+     kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.ownerReferences[*].kind}{"\n"}{end}'
+     ```
+
+3. **Performance Problems**
+   - Monitor resource usage
+   - Check network latency
+   - Verify cache effectiveness
+   - Review connection pooling
+
+### Quick Fixes
+
+\`\`\`bash
+
+# Restart Client Pod
+
+kubectl rollout restart deployment client -n client-layer
+
+# Check Logs
+
+kubectl logs -n client-layer -l app=client
+
+# Verify Connectivity
+
+kubectl exec -n client-layer deploy/client -- curl kubernetes.default.svc
+\`\`\`
+
+## Future Roadmap
+
+### Phase 1: Metrics & Performance 📊
+
+- [ ] Add memory usage visualization
+- [ ] Implement historical metrics tracking
+- [ ] Add detailed pod tooltips
+- [ ] Optimize real-time updates
+
+### Phase 2: User Experience 🎨
+
+- [ ] Add pod filtering and search
+- [ ] Implement zoom and pan controls
+- [ ] Improve connection visualization
+- [ ] Add custom view layouts
+
+### Phase 3: Advanced Features 🚀
+
+- [ ] Custom metrics support
+- [ ] Alert configuration
+- [ ] Dashboard customization
+- [ ] Advanced traffic patterns
+
+## Contributing
+
+### Development Guidelines
+
+1. Use TypeScript for all new code
+2. Follow existing code style
+3. Add tests for new features
+4. Update documentation
+5. Test fallback mechanisms
+
+### Code Structure
+
+\`\`\`
 client/
-├── src/              # Source code
-│   ├── app/         # Next.js App Router
-│   ├── components/  # React components
-│   ├── hooks/       # Custom hooks
-│   ├── lib/         # Utility functions
-│   └── types/       # TypeScript types
-├── public/          # Static assets
-├── Dockerfile       # Container configuration
-└── package.json     # Dependencies
-```
+├── src/
+│ ├── app/ # Next.js App Router
+│ ├── components/ # React components
+│ ├── hooks/ # Custom hooks
+│ ├── lib/ # Utilities
+│ └── types/ # TypeScript types
+├── public/ # Static assets
+└── Dockerfile # Container config
+\`\`\`
+
+## Security Guidelines
+
+### Must Not Change
+
+1. **Security Settings**
+
+   - Service account token mounts
+   - RBAC permission levels
+   - API exposure rules
+
+2. **Resource Management**
+
+   - Container resource limits
+   - Health check configurations
+   - Probe timeout values
+
+3. **Development Practices**
+   - TypeScript usage
+   - Pre-commit linting
+   - Error handling patterns
 
 ---
 
-This README follows the project's documentation principles: conceptual clarity, lessons learned, configuration/code guardrails, troubleshooting tips, and consistency. For more details, see the root README.md and k8s/README.md.
+For more detailed information, see:
 
-## Kubernetes Cluster Requirements & Data Dependencies
-
-The frontend visualization depends on the following from the Kubernetes cluster and backend API:
-
-- **Pod Data:**
-  - Each pod must provide: name, namespace (layer), labels (e.g., app, deployment), status, deployment info, CPU/memory metrics, and a short name for display.
-  - Pods should be labeled consistently for correct grouping and visualization.
-- **Connections Array:**
-  - The backend must provide a list of logical pod-to-pod connections (can be static or generated).
-- **Namespace Model:**
-  - The cluster must use the four-layer namespace model: `client-layer`, `server-layer`, `data-layer`, `observability-layer`.
-  - Only these namespaces are visualized; system/default namespaces are ignored.
-- **Backend Access:**
-  - The backend must have access to the Kubernetes API and metrics-server to fetch pod and metrics data.
-- **Debugging & Validation:**
-  - You can use shell scripts or `kubectl` commands to inspect the cluster state and validate what the backend is receiving. See below for examples.
-
-### Example: Inspecting Cluster State with kubectl
-
-```bash
-# List all pods with labels in all relevant namespaces
-kubectl get pods -n client-layer -o wide --show-labels
-kubectl get pods -n server-layer -o wide --show-labels
-kubectl get pods -n data-layer -o wide --show-labels
-kubectl get pods -n observability-layer -o wide --show-labels
-
-# Get pod metrics (requires metrics-server)
-kubectl top pods -n client-layer
-kubectl top pods -n server-layer
-kubectl top pods -n data-layer
-kubectl top pods -n observability-layer
-
-# Get deployments and their labels
-kubectl get deployments -A -o wide --show-labels
-```
-
-## Debugging & Validation Tools
-
-To help with development and troubleshooting, the following tools are available:
-
-- **Shell Script:**
-
-  - A script (`scripts/inspect-cluster.sh`) is provided to fetch and display all relevant pod and deployment data (including labels and metrics) from the cluster using `kubectl`.
-  - You can run this script directly, or use the centralized Makefile target:
-    ```bash
-    make inspect-cluster
-    ```
-  - See the script in the `scripts/` directory for usage instructions.
-
-- **Backend Debug Endpoint:**
-  - The backend exposes a debug endpoint at `/api/debug/raw-k8s` that returns the raw pod and deployment data fetched from the Kubernetes API.
-  - This endpoint is for development and debugging only. **Do not expose it in production.**
-  - You can use this endpoint to inspect exactly what the backend is receiving from the cluster.
-
-## Centralized Command Management with Makefile
-
-All operational commands for this project are centralized in the Makefile. This provides:
-
-- A single, consistent interface for all cluster and application operations
-- Easy discoverability of available commands (run `make help`)
-- Standardization and automation of workflows
-
-**Example:**
-
-- To inspect the cluster state (pods, deployments, metrics), simply run:
-  ```bash
-  make inspect-cluster
-  ```
-  This will execute the `scripts/inspect-cluster.sh` script and print the results for all main namespaces.
-
-Refer to the Makefile for more commands and usage details.
-
-## Visual & UX Design Principles for the System Diagram
-
-The system diagram is designed with the following principles and ideas:
-
-- **Clarity & Accessibility:**
-
-  - Uses a colorblind-friendly, high-contrast palette for pod status, load balancers, and connections.
-  - Layer/namespace labels and the legend are styled for prominence and readability.
-  - All interactive elements (pods, load balancers) are accessible via keyboard and screen readers.
-
-- **Interactivity & Usability:**
-
-  - Tooltips on hover provide detailed pod and deployment information.
-  - A visual legend/key explains all shapes, colors, and lines.
-  - Mock data fallback ensures the diagram is always meaningful, even without cluster connectivity.
-
-- **Incremental, Review-Driven Improvement:**
-
-  - Visual polish and UX features are added step-by-step, with user review and feedback after each change.
-  - The design is extensible, with plans for status badges, icons, filtering, and more interactivity.
-
-- **Goal:**
-  - Make the system diagram both informative and easy to use for all stakeholders, from developers to operators.
-  - Ensure the visualization helps users quickly understand system health, structure, and relationships.
-
-For more details on the current and planned features, see the code and commit history. Further enhancements are ongoing as part of an iterative, user-centered design process.
-
-## Alternative Layouts: Side-by-Side Layers
-
-- The current design uses a hybrid layout: the server-layer is given visual prominence on the right, while the other layers are stacked on the left.
-- The system is flexible and can be adapted as your architecture evolves.
-
-While the current system diagram stacks each namespace/layer vertically, the design is extensible and could support displaying multiple layers side-by-side (in the same horizontal line). This approach can be useful when:
-
-- Layers are conceptually peers (e.g., multiple frontends or independent services)
-- You want to show parallelism or symmetry in the architecture
-- You have many layers and want to save vertical space
-
-**Pros:**
-
-- More compact and visually balanced diagram
-- Highlights relationships between peer layers
-- Useful for architectures with "columns" (e.g., multi-tenant, multi-region)
-
-**Cons:**
-
-- Connection lines may become more complex (crossing lines, more visual clutter)
-- May reduce clarity if layers are not truly peers
-- Harder to maintain a strict "top-down" flow
-
-**Implementation:**
-
-- Define a layout map, e.g.:
-  ```js
-  const LAYER_ROWS = [
-    ["client-layer", "server-layer"], // Row 1: side by side
-    ["data-layer"], // Row 2
-    ["observability-layer"], // Row 3
-  ];
-  ```
-- Update the layout logic to center and space layers horizontally within each row
-
-The current design uses vertical stacking for clarity, but the system is flexible and can be adapted as your architecture evolves.
+- [API Documentation](../docs/api.md)
+- [Monitoring Setup](../docs/monitoring.md)
+- [Testing Procedures](../docs/testing.md)

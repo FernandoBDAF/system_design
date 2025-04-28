@@ -9,9 +9,15 @@ This directory contains Kubernetes configurations for deploying the profile serv
 ### Successfully Deployed Components
 
 - **Namespaces**: All required namespaces (`client-layer`, `server-layer`, `data-layer`, `observability-layer`) created successfully
+- **Client Layer**:
+  - Dashboard UI deployed and accessible
+  - Service account permissions configured
+  - Metrics integration working
+  - Real-time data visualization functional
 - **Data Layer**: PostgreSQL, Redis, and RabbitMQ services deployed in `data-layer` namespace
 - **Network Policies**: Basic network policies implemented for cross-layer communication
 - **RBAC**: Service accounts and roles configured for component access
+- **Metrics Server**: Successfully configured with insecure TLS for local development
 
 ### Known Issues
 
@@ -21,9 +27,9 @@ This directory contains Kubernetes configurations for deploying the profile serv
    - Need to implement better connection retry logic and graceful fallbacks
    - Current error: CrashLoopBackOff due to failed connections to data services
 
-2. **Metrics API**:
-   - Metrics API not fully available
-   - HPA configurations may not work until metrics-server is properly configured
+2. **Grafana Integration**:
+   - Grafana pod has CreateContainerConfigError
+   - Configuration needs review and update
 
 ### Next Steps
 
@@ -35,9 +41,9 @@ This directory contains Kubernetes configurations for deploying the profile serv
 
 2. **Observability**:
 
-   - Complete metrics-server setup
-   - Implement proper health check endpoints
+   - Review and fix Grafana configuration
    - Add more detailed logging for startup sequence
+   - Implement additional dashboard visualizations
 
 3. **Testing**:
    - Create comprehensive integration tests
@@ -65,6 +71,19 @@ The application implements Role-Based Access Control (RBAC) across multiple file
    - Contains:
      - Server layer access to observability layer
      - Client layer access to server layer
+     - Client layer access to deployments.apps
+   - Required Permissions:
+     ```yaml
+     - apiGroups: [""]
+       resources: ["pods", "nodes", "services"]
+       verbs: ["get", "list", "watch"]
+     - apiGroups: ["metrics.k8s.io"]
+       resources: ["pods", "nodes"]
+       verbs: ["get", "list", "watch"]
+     - apiGroups: ["apps"]
+       resources: ["deployments"]
+       verbs: ["get", "list", "watch"]
+     ```
    - Location: `k8s/config/infrastructure/rbac.yaml`
 
 2. **`service-account.yaml`**
@@ -74,6 +93,17 @@ The application implements Role-Based Access Control (RBAC) across multiple file
      - `pod-reader` service accounts
      - Cluster roles for metrics access
      - Cluster role bindings
+     - Service account token mounting configuration
+   - Token Mounting:
+     ```yaml
+     volumes:
+       - name: pod-reader-token
+         projected:
+           sources:
+             - serviceAccountToken:
+                 path: token
+                 expirationSeconds: 3600
+     ```
    - Location: `k8s/config/infrastructure/service-account.yaml`
 
 3. **`metrics-server.yaml`**
@@ -83,6 +113,20 @@ The application implements Role-Based Access Control (RBAC) across multiple file
      - Metrics server service account
      - Cluster roles for metrics aggregation
      - Role bindings for API server authentication
+     - Metrics API endpoint configuration
+   - Verification Steps:
+
+     ```bash
+     # Check metrics server deployment
+     kubectl get deployment metrics-server -n kube-system
+
+     # Verify metrics API endpoint
+     kubectl get --raw /apis/metrics.k8s.io/v1beta1/pods
+
+     # Check metrics collection
+     kubectl top pods --all-namespaces
+     ```
+
    - Location: `k8s/config/layers/observability/metrics-server.yaml`
 
 4. **`monitoring.yaml`**
@@ -90,7 +134,88 @@ The application implements Role-Based Access Control (RBAC) across multiple file
    - Contains:
      - Service account configurations
      - RBAC settings for metrics collection
+     - Network policies for metrics access
    - Location: `k8s/config/layers/observability/monitoring.yaml`
+
+### Network Policies for Metrics Access
+
+1. **`allow-metrics-access`**
+
+   - Location: `client-layer` namespace
+   - Purpose: Allows client layer to access metrics server
+   - Configuration:
+     ```yaml
+     spec:
+       podSelector: {}
+       policyTypes:
+         - Egress
+       egress:
+         - to:
+             - namespaceSelector:
+                 matchLabels:
+                   kubernetes.io/metadata.name: kube-system
+           ports:
+             - protocol: TCP
+               port: 443
+     ```
+
+2. **`allow-k8s-api-access`**
+   - Location: `client-layer` namespace
+   - Purpose: Allows client layer to access Kubernetes API server
+   - Configuration:
+     ```yaml
+     spec:
+       podSelector: {}
+       policyTypes:
+         - Egress
+       egress:
+         - to:
+             - namespaceSelector:
+                 matchLabels:
+                   kubernetes.io/metadata.name: default
+           ports:
+             - protocol: TCP
+               port: 443
+     ```
+
+### Testing RBAC Configuration
+
+1. **Service Account Access Tests**
+
+   ```bash
+   # Test deployment access
+   kubectl auth can-i list deployments --as=system:serviceaccount:client-layer:client-layer
+
+   # Test pod access
+   kubectl auth can-i get pods --as=system:serviceaccount:client-layer:client-layer
+
+   # Test metrics access
+   kubectl auth can-i get metrics --as=system:serviceaccount:client-layer:client-layer
+   ```
+
+2. **Metrics Server Verification**
+
+   ```bash
+   # Check metrics server status
+   kubectl get deployment metrics-server -n kube-system
+
+   # Verify metrics API
+   kubectl get --raw /apis/metrics.k8s.io/v1beta1/pods
+
+   # Test metrics collection
+   kubectl top pods --all-namespaces
+   ```
+
+3. **Network Policy Verification**
+
+   ```bash
+   # Check network policies
+   kubectl get networkpolicies -n client-layer
+
+   # Test connectivity
+   kubectl exec -n client-layer <pod-name> -- curl -v https://kubernetes.default.svc
+   kubectl exec -n client-layer <pod-name> -- curl -v https://metrics-server.kube-system.svc
+   ```
 
 ### Future Consolidation Plans
 
@@ -681,8 +806,9 @@ For more detailed information about specific aspects of the Kubernetes configura
      - Worker: 8081
    - Database ports:
      - PostgreSQL: 5432
-     - Redis: 6379
-     - RabbitMQ: 5672/15672
+
+- Redis: 6379
+  - RabbitMQ: 5672/15672
 
 ### Guardrails: What Must Not Change
 
@@ -794,12 +920,12 @@ For more detailed information about specific aspects of the Kubernetes configura
 
 1. **Basic Checks**
 
-   ```bash
+```bash
    make status          # Check component status
    make logs            # View component logs
    kubectl top pods     # Check resource usage
    kubectl get namespace --show-labels  # Verify namespace labels
-   ```
+```
 
 2. **Common Fixes**
    ```bash
@@ -1676,9 +1802,113 @@ The client component requires specific configuration to access the Kubernetes AP
    - The service account must have the following permissions:
      - `get`, `list`, `watch` on pods in all layer namespaces
      - `get`, `list`, `watch` on services in all layer namespaces
+     - `get`, `list`, `watch` on deployments.apps in all layer namespaces
      - Access to metrics API for pod metrics
+   - Required RBAC configuration:
+     ```yaml
+     apiVersion: rbac.authorization.k8s.io/v1
+     kind: ClusterRole
+     metadata:
+       name: pod-reader
+     rules:
+       - apiGroups: [""]
+         resources: ["pods", "nodes", "services"]
+         verbs: ["get", "list", "watch"]
+       - apiGroups: ["metrics.k8s.io"]
+         resources: ["pods", "nodes"]
+         verbs: ["get", "list", "watch"]
+       - apiGroups: ["apps"]
+         resources: ["deployments"]
+         verbs: ["get", "list", "watch"]
+     ```
 
-2. **Environment Variables**
+2. **Metrics Server Configuration**
+
+   - Ensure metrics-server is deployed and running:
+     ```bash
+     kubectl get deployment metrics-server -n kube-system
+     ```
+   - Verify metrics API endpoint is accessible:
+     ```bash
+     kubectl get --raw /apis/metrics.k8s.io/v1beta1/pods
+     ```
+   - Check metrics collection for all namespaces:
+     ```bash
+     kubectl top pods --all-namespaces
+     ```
+
+3. **Network Policies**
+
+   - Required network policies for client layer:
+
+     ```yaml
+     # Allow access to Kubernetes API server
+     apiVersion: networking.k8s.io/v1
+     kind: NetworkPolicy
+     metadata:
+       name: allow-k8s-api-access
+       namespace: client-layer
+     spec:
+       podSelector: {}
+       policyTypes:
+       - Egress
+       egress:
+       - to:
+         - namespaceSelector:
+             matchLabels:
+               kubernetes.io/metadata.name: default
+         ports:
+         - protocol: TCP
+           port: 443
+
+     # Allow access to metrics server
+     apiVersion: networking.k8s.io/v1
+     kind: NetworkPolicy
+     metadata:
+       name: allow-metrics-access
+       namespace: client-layer
+     spec:
+       podSelector: {}
+       policyTypes:
+       - Egress
+       egress:
+       - to:
+         - namespaceSelector:
+             matchLabels:
+               kubernetes.io/metadata.name: kube-system
+         ports:
+         - protocol: TCP
+           port: 443
+     ```
+
+4. **Service Account Token Mounting**
+
+   - Required volume mounts in client pod:
+     ```yaml
+     volumeMounts:
+       - name: kube-api-access
+         mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+         readOnly: true
+     volumes:
+       - name: kube-api-access
+         projected:
+           sources:
+             - serviceAccountToken:
+                 expirationSeconds: 3600
+                 path: token
+             - configMap:
+                 name: kube-root-ca.crt
+                 items:
+                   - key: ca.crt
+                     path: ca.crt
+             - downwardAPI:
+                 items:
+                   - path: namespace
+                     fieldRef:
+                       fieldPath: metadata.namespace
+     ```
+
+5. **Environment Variables**
    Required environment variables in the client deployment:
 
    ```yaml
@@ -1697,34 +1927,7 @@ The client component requires specific configuration to access the Kubernetes AP
        value: "443"
    ```
 
-3. **Volume Mounts**
-   Required volume mounts for Kubernetes API access:
-
-   ```yaml
-   volumeMounts:
-     - name: kube-api-access
-       mountPath: /var/run/secrets/kubernetes.io/serviceaccount
-       readOnly: true
-   volumes:
-     - name: kube-api-access
-       projected:
-         sources:
-           - serviceAccountToken:
-               expirationSeconds: 3600
-               path: token
-           - configMap:
-               name: kube-root-ca.crt
-               items:
-                 - key: ca.crt
-                   path: ca.crt
-           - downwardAPI:
-               items:
-                 - path: namespace
-                   fieldRef:
-                     fieldPath: metadata.namespace
-   ```
-
-4. **Kubernetes Client Configuration**
+6. **Kubernetes Client Configuration**
    The client should use the following configuration pattern:
 
    ```typescript
@@ -1736,7 +1939,7 @@ The client component requires specific configuration to access the Kubernetes AP
    }
    ```
 
-5. **Namespace Handling**
+7. **Namespace Handling**
    The client should fetch pods from these namespaces:
 
    - `client-layer`
@@ -1744,14 +1947,14 @@ The client component requires specific configuration to access the Kubernetes AP
    - `data-layer`
    - `observability-layer`
 
-6. **Error Handling**
+8. **Error Handling**
 
    - Implement proper error handling for API calls
    - Log errors for debugging
    - Fall back to mock data only when necessary
    - Provide clear error messages in the UI
 
-7. **Data Structure**
+9. **Data Structure**
    Each pod object should include:
 
    ```typescript
@@ -1764,44 +1967,56 @@ The client component requires specific configuration to access the Kubernetes AP
      type: string;
      namespace: string;
      labels: Record<string, string>;
+     metrics?: {
+       cpu: string;
+       memory: string;
+     };
    }
    ```
 
-8. **Health Checks**
-   Configure proper health checks:
+10. **Health Checks**
+    Configure proper health checks:
 
-   ```yaml
-   livenessProbe:
-     httpGet:
-       path: /
-       port: http
-     initialDelaySeconds: 60
-     periodSeconds: 15
-     timeoutSeconds: 5
-   readinessProbe:
-     httpGet:
-       path: /
-       port: http
-     initialDelaySeconds: 30
-     periodSeconds: 10
-     timeoutSeconds: 5
-   ```
+    ```yaml
+    livenessProbe:
+      httpGet:
+        path: /
+        port: http
+      initialDelaySeconds: 60
+      periodSeconds: 15
+      timeoutSeconds: 5
+    readinessProbe:
+      httpGet:
+        path: /
+        port: http
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+    ```
 
-9. **Resource Requirements**
+11. **Resource Requirements**
 
-   ```yaml
-   resources:
-     requests:
-       memory: "256Mi"
-       cpu: "200m"
-     limits:
-       memory: "512Mi"
-       cpu: "500m"
-   ```
+    ```yaml
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "200m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    ```
 
-10. **Testing**
+12. **Testing**
     - Test the client in both local and cluster environments
-    - Verify service account permissions
+    - Verify service account permissions:
+      ```bash
+      kubectl auth can-i list deployments --as=system:serviceaccount:client-layer:client-layer
+      kubectl auth can-i get pods --as=system:serviceaccount:client-layer:client-layer
+      kubectl auth can-i get metrics --as=system:serviceaccount:client-layer:client-layer
+      ```
     - Test error scenarios and fallback behavior
     - Validate metrics collection
     - Test cross-namespace pod listing
+    - Verify network policy enforcement
+    - Test service account token mounting
+    - Check metrics server connectivity

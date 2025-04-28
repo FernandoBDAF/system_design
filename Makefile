@@ -302,13 +302,7 @@ get-profiles:
 # Port forwarding target
 port-forward:
 	@echo "Starting port forwarding for all services..."
-	@kubectl port-forward svc/client -n client-layer 3000:3000 &
-	@kubectl port-forward svc/server -n server-layer 8080:8080 &
-	@kubectl port-forward svc/rabbitmq -n server-layer 5672:5672 15672:15672 &
-	@kubectl port-forward svc/postgres -n data-layer 5432:5432 &
-	@kubectl port-forward svc/redis -n data-layer 6379:6379 &
-	@kubectl port-forward svc/prometheus -n observability-layer 9090:9090 &
-	@kubectl port-forward svc/grafana -n observability-layer 3000:3000 &
+	@./port-forward.sh
 
 test-cache:
 	@echo "Running cache tests..."

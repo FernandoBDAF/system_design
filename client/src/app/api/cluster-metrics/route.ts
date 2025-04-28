@@ -29,17 +29,35 @@ function parseCpu(cpu: string): number {
 }
 
 function shortenPodName(name: string): string {
-  // e.g. profile-client-5994555b84-z5xl7 => client-5994
-  const match = name.match(/([a-zA-Z]+)-([a-zA-Z]+)-([0-9a-f]+)-/);
-  if (match) {
-    return `${match[2]}-${match[3].slice(0, 4)}`;
+  // Handle StatefulSet pods (e.g., postgres-0, rabbitmq-0)
+  if (name.match(/^[a-zA-Z]+-\d+$/)) {
+    return name;
   }
-  // fallback: just use last two segments
+
+  // e.g. server-5489b5fdcf-9vj6b => server-9vj6
+  const match = name.match(/([a-zA-Z]+)-([a-f0-9]+)-([a-z0-9]{5})/i);
+  if (match) {
+    return `${match[1]}-${match[3].slice(0, 4)}`;
+  }
+
+  // fallback: just use last segment
   const parts = name.split("-");
-  if (parts.length >= 3) {
-    return `${parts[parts.length - 3]}-${parts[parts.length - 2].slice(0, 4)}`;
+  if (parts.length > 0) {
+    const lastPart = parts[parts.length - 1];
+    return `${parts[0]}-${lastPart.slice(0, 4)}`;
   }
   return name;
+}
+
+function mapLayerLabel(label: string): string {
+  // Map k8s layer labels to our visualization layers
+  const layerMap: Record<string, string> = {
+    frontend: "client-layer",
+    application: "server-layer",
+    persistence: "data-layer",
+    monitoring: "observability-layer",
+  };
+  return layerMap[label] || label;
 }
 
 export async function GET() {
@@ -85,11 +103,6 @@ export async function GET() {
     const nodes: V1Node[] = nodesResponse.items;
     console.log("[cluster-metrics] Found pods:", pods.length);
     console.log("[cluster-metrics] Found nodes:", nodes.length);
-    // Assume all pods are on the first node
-    const nodeCpuCapacityStr = nodes[0]?.status?.capacity?.cpu || "1";
-    const nodeCpuCapacity = nodeCpuCapacityStr.endsWith("m")
-      ? parseInt(nodeCpuCapacityStr.replace("m", ""), 10)
-      : parseFloat(nodeCpuCapacityStr) * 1000;
 
     // Get metrics for all pods in all namespaces
     console.log("[cluster-metrics] Fetching metrics for all pods");
@@ -131,8 +144,17 @@ export async function GET() {
       if (metric && metric.containers[0]?.usage?.cpu) {
         cpu = metric.containers[0].usage.cpu;
         const cpuMillicores = parseCpu(cpu);
-        cpuPercent = nodeCpuCapacity
-          ? Math.round((cpuMillicores / nodeCpuCapacity) * 1000) / 10
+        // Get pod's CPU limit
+        const cpuLimit = pod.spec?.containers[0]?.resources?.limits?.cpu;
+        const cpuLimitMillicores = cpuLimit ? parseCpu(cpuLimit) : 0;
+
+        // Calculate percentage based on pod's CPU limit
+        // Example: Pod using 73m out of 500m limit = 14.6%
+        cpuPercent = cpuLimitMillicores
+          ? Math.min(
+              Math.round((cpuMillicores / cpuLimitMillicores) * 100) / 10,
+              100
+            )
           : 0;
       }
       const memory = metric?.containers[0]?.usage?.memory || "";
@@ -141,20 +163,37 @@ export async function GET() {
       const ownerRefs = pod.metadata?.ownerReferences || [];
       const deployment = labels.app || (ownerRefs[0]?.name ?? "");
       const isDeploymentPod = ownerRefs.some(
-        (ref) => ref.kind === "Deployment"
+        (ref) => ref.kind === "Deployment" || ref.kind === "ReplicaSet"
       );
-      const namespace = pod.metadata?.namespace || "default";
-      // Layer = namespace for visualization
+
+      // Determine pod status
+      let status = pod.status?.phase || "";
+      // Check container statuses for more accurate state
+      const containerStatuses = pod.status?.containerStatuses || [];
+      if (containerStatuses.length > 0) {
+        const mainContainer = containerStatuses[0];
+        if (mainContainer.state?.waiting) {
+          status = "Warning";
+          if (mainContainer.state.waiting.reason === "CrashLoopBackOff") {
+            status = "Error";
+          }
+        } else if (!mainContainer.ready) {
+          status = "Warning";
+        }
+      }
+
+      // Use layer label instead of namespace
+      const layerLabel = labels.layer || "";
       return {
         name: pod.metadata?.name || "",
         shortName: shortenPodName(pod.metadata?.name || ""),
-        status: pod.status?.phase || "",
+        status,
         cpu,
         cpuPercent,
         memory,
         deployment,
         isDeploymentPod,
-        layer: namespace,
+        layer: mapLayerLabel(layerLabel),
       };
     });
 

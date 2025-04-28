@@ -172,10 +172,19 @@ create_resource "k8s/config/layers/server/worker.yaml" "server-layer"
 echo "Deploying client layer components..."
 create_resource "k8s/config/layers/client/client.yaml" "client-layer"
 
+# Deploy metrics server
+echo "Deploying metrics server..."
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+# Add insecure TLS flag for local development
+echo "Configuring metrics server for local development..."
+kubectl patch deployment metrics-server -n kube-system --type=json \
+  -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+
 # Wait for server and client layer components
 check_resource "deployment" "server" "server-layer" 180 &
 check_resource "deployment" "worker" "server-layer" 180 &
 check_resource "deployment" "client" "client-layer" 180 &
+check_resource "deployment" "metrics-server" "kube-system" 180 &
 wait
 
 # Deploy observability layer components

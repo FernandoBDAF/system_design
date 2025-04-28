@@ -66,7 +66,13 @@ metadata:
   name: pod-reader
 rules:
   - apiGroups: [""]
-    resources: ["pods"]
+    resources: ["pods", "nodes", "services"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
     verbs: ["get", "list", "watch"]
 ---
 # Role binding for client-layer service account

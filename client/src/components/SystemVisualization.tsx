@@ -61,23 +61,31 @@ const SystemVisualization: React.FC<SystemVisualizationProps> = ({
   // Group pods by layer (namespace)
   const podsByLayer = useMemo(() => {
     const byLayer: Record<string, PodWithMetrics[]> = {};
+    // First, deduplicate pods by name within each layer
+    const seenPods = new Set<string>();
     filteredPodsToUse.forEach((pod) => {
       const layer = pod.layer || "service";
-      if (!byLayer[layer]) byLayer[layer] = [];
-      byLayer[layer].push(pod);
+      const podKey = `${layer}:${pod.name}`;
+      if (!seenPods.has(podKey)) {
+        if (!byLayer[layer]) byLayer[layer] = [];
+        byLayer[layer].push(pod);
+        seenPods.add(podKey);
+      }
     });
     return byLayer;
   }, [filteredPodsToUse]);
 
-  // Group deployments by layer
+  // Group deployments and statefulsets by layer
   const deploymentsByLayer = useMemo(() => {
     const byLayer: Record<string, Record<string, PodWithMetrics[]>> = {};
     Object.entries(podsByLayer).forEach(([layer, pods]) => {
       const deployments: Record<string, PodWithMetrics[]> = {};
       pods.forEach((pod) => {
-        if (pod.isDeploymentPod && pod.deployment) {
-          if (!deployments[pod.deployment]) deployments[pod.deployment] = [];
-          deployments[pod.deployment].push(pod);
+        // Group by deployment name
+        if (pod.isDeploymentPod || pod.deployment) {
+          const deploymentName = pod.deployment || pod.name.split("-")[0];
+          if (!deployments[deploymentName]) deployments[deploymentName] = [];
+          deployments[deploymentName].push(pod);
         }
       });
       byLayer[layer] = deployments;
@@ -85,12 +93,12 @@ const SystemVisualization: React.FC<SystemVisualizationProps> = ({
     return byLayer;
   }, [podsByLayer]);
 
-  // Standalone pods by layer
+  // Standalone pods by layer (only truly standalone pods)
   const standalonePodsByLayer = useMemo(() => {
     const byLayer: Record<string, PodWithMetrics[]> = {};
     Object.entries(podsByLayer).forEach(([layer, pods]) => {
       byLayer[layer] = pods.filter(
-        (pod) => !pod.isDeploymentPod || !pod.deployment
+        (pod) => !pod.isDeploymentPod && !pod.deployment
       );
     });
     return byLayer;

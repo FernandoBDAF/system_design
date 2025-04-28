@@ -12,6 +12,12 @@ help:
 	@echo "  make stop          - Stop the entire stack"
 	@echo "  make restart       - Restart the entire stack"
 	@echo "  make status        - Check status of all components"
+	@echo "  make inspect-cluster - Comprehensive cluster inspection"
+	@echo "  make check-health  - Check health of all components"
+	@echo "  make check-connectivity - Test connectivity between layers"
+	@echo "  make check-resources - Check resource usage"
+	@echo "  make check-logs    - Show recent logs from all components"
+	@echo "  make check-events  - Show recent cluster events"
 	@echo "  make logs          - View logs for a component (e.g., make logs COMPONENT=server NAMESPACE=server-layer)"
 	@echo "  make test          - Run API tests"
 	@echo "  make clean         - Clean up Kubernetes resources"
@@ -31,10 +37,9 @@ help:
 	@echo "  make test-metrics-api - Test metrics API endpoints"
 	@echo "  make logs-prometheus - Show Prometheus logs"
 	@echo "  make logs-grafana   - Show Grafana logs"
-	@echo "  make test-deployment - Run comprehensive deployment test (creates namespaces, deploys components, tests communication)"
+	@echo "  make test-deployment - Run comprehensive deployment test"
 	@echo "  make test-validate  - Validate initial setup requirements"
 	@echo "  make test-verify    - Verify deployment state"
-	@echo "  make inspect-cluster - Inspect pods, deployments, and metrics in all main namespaces (runs scripts/inspect-cluster.sh)"
 	@echo ""
 	@echo "Layer-specific commands:"
 	@echo "  make status-client  - Check status of client layer"
@@ -64,15 +69,15 @@ delete-cluster:
 # Cleanup targets
 clean:
 	@echo "Cleaning up Kubernetes resources..."
-	@kubectl delete -f k8s/namespaces.yaml --ignore-not-found=true
-	@kubectl delete -f k8s/network-policies.yaml --ignore-not-found=true
-	@kubectl delete -f k8s/postgresql.yaml --ignore-not-found=true
-	@kubectl delete -f k8s/redis.yaml --ignore-not-found=true
-	@kubectl delete -f k8s/rabbitmq.yaml --ignore-not-found=true
-	@kubectl delete -f k8s/server.yaml --ignore-not-found=true
-	@kubectl delete -f k8s/worker.yaml --ignore-not-found=true
-	@kubectl delete -f k8s/client.yaml --ignore-not-found=true
-	@kubectl delete -f k8s/monitoring.yaml --ignore-not-found=true
+	@kubectl delete -f k8s/config/infrastructure/namespaces.yaml --ignore-not-found=true
+	@kubectl delete -f k8s/config/infrastructure/network-policies.yaml --ignore-not-found=true
+	@kubectl delete -f k8s/config/layers/data/postgresql.yaml --ignore-not-found=true
+	@kubectl delete -f k8s/config/layers/data/redis.yaml --ignore-not-found=true
+	@kubectl delete -f k8s/config/layers/data/rabbitmq.yaml --ignore-not-found=true
+	@kubectl delete -f k8s/config/layers/server/server.yaml --ignore-not-found=true
+	@kubectl delete -f k8s/config/layers/server/worker.yaml --ignore-not-found=true
+	@kubectl delete -f k8s/config/layers/client/client.yaml --ignore-not-found=true
+	@kubectl delete -f k8s/config/layers/observability/monitoring.yaml --ignore-not-found=true
 	@echo "Kubernetes resources cleaned up."
 
 clean-all: clean
@@ -97,8 +102,8 @@ build:
 # Deployment targets
 start: create-cluster build
 	@echo "Starting the application..."
-	@chmod +x k8s/apply-layers.sh
-	@./k8s/apply-layers.sh
+	@chmod +x k8s/config/layers/scripts/apply-layers.sh
+	@./k8s/config/layers/scripts/apply-layers.sh
 	@echo "Application started successfully!"
 
 stop:
@@ -117,16 +122,21 @@ restart: stop start
 
 # Status and logging targets
 status:
-	@echo "Checking status of all components..."
+	@echo "=== Cluster Status Report ==="
+	@echo "\n1. Namespace Status:"
+	@kubectl get namespaces -l layer
+	@echo "\n2. Pod Status by Layer:"
 	@echo "\nClient Layer:"
-	@kubectl get pods,svc -n client-layer
+	@kubectl get pods -n client-layer -o custom-columns=NAME:.metadata.name,STATUS:.status.phase,READY:.status.containerStatuses[0].ready,RESTARTS:.status.containerStatuses[0].restartCount,IP:.status.podIP,NODE:.spec.nodeName
 	@echo "\nServer Layer:"
-	@kubectl get pods,svc -n server-layer
+	@kubectl get pods -n server-layer -o custom-columns=NAME:.metadata.name,STATUS:.status.phase,READY:.status.containerStatuses[0].ready,RESTARTS:.status.containerStatuses[0].restartCount,IP:.status.podIP,NODE:.spec.nodeName
 	@echo "\nData Layer:"
-	@kubectl get pods,svc -n data-layer
+	@kubectl get pods -n data-layer -o custom-columns=NAME:.metadata.name,STATUS:.status.phase,READY:.status.containerStatuses[0].ready,RESTARTS:.status.containerStatuses[0].restartCount,IP:.status.podIP,NODE:.spec.nodeName
 	@echo "\nObservability Layer:"
-	@kubectl get pods,svc -n observability-layer
-	@echo "\nAccess points (after running 'make port-forward'):"
+	@kubectl get pods -n observability-layer -o custom-columns=NAME:.metadata.name,STATUS:.status.phase,READY:.status.containerStatuses[0].ready,RESTARTS:.status.containerStatuses[0].restartCount,IP:.status.podIP,NODE:.spec.nodeName
+	@echo "\n3. Service Status:"
+	@kubectl get svc --all-namespaces -l layer
+	@echo "\n4. Access Points (after running 'make port-forward'):"
 	@echo "  Client UI:     http://localhost:3000"
 	@echo "  Server API:    http://localhost:8080"
 	@echo "  PostgreSQL:    postgres://localhost:5432"
@@ -135,6 +145,64 @@ status:
 	@echo "  RabbitMQ UI:   http://localhost:15672"
 	@echo "  Prometheus:    http://localhost:9090"
 	@echo "  Grafana:       http://localhost:3000"
+	@echo "\n5. Resource Usage:"
+	@kubectl top pods --all-namespaces --sort-by=cpu
+	@echo "\n=== End of Status Report ==="
+
+# New diagnostic commands
+check-health:
+	@echo "=== Health Check Report ==="
+	@echo "\n1. Pod Health:"
+	@kubectl get pods --all-namespaces -o json | jq -r '.items[] | select(.status.phase != "Running") | "\(.metadata.namespace)/\(.metadata.name): \(.status.phase)"'
+	@echo "\n2. Container Restarts:"
+	@kubectl get pods --all-namespaces -o json | jq -r '.items[] | select(.status.containerStatuses[].restartCount > 0) | "\(.metadata.namespace)/\(.metadata.name): \(.status.containerStatuses[].restartCount) restarts"'
+	@echo "\n3. Service Endpoints:"
+	@kubectl get endpoints --all-namespaces -l layer
+	@echo "\n4. Network Policy Status:"
+	@kubectl get networkpolicies --all-namespaces
+	@echo "\n=== End of Health Check Report ==="
+
+check-connectivity:
+	@echo "=== Connectivity Test Report ==="
+	@echo "\n1. Client to Server:"
+	@kubectl exec -n client-layer $$(kubectl get pod -n client-layer -l app=client -o jsonpath='{.items[0].metadata.name}') -- curl -s http://server.server-layer:8080/health || echo "Connection failed"
+	@echo "\n2. Server to Data Layer:"
+	@kubectl exec -n server-layer $$(kubectl get pod -n server-layer -l app=server -o jsonpath='{.items[0].metadata.name}') -- sh -c 'nc -zv postgres.data-layer 5432 && nc -zv redis.data-layer 6379 && nc -zv rabbitmq.server-layer 5672' || echo "Connection failed"
+	@echo "\n3. DNS Resolution:"
+	@kubectl exec -n client-layer $$(kubectl get pod -n client-layer -l app=client -o jsonpath='{.items[0].metadata.name}') -- nslookup server.server-layer
+	@echo "\n=== End of Connectivity Test Report ==="
+
+check-resources:
+	@echo "=== Resource Usage Report ==="
+	@echo "\n1. Node Resources:"
+	@kubectl top nodes
+	@echo "\n2. Pod Resources (CPU):"
+	@kubectl top pods --all-namespaces --sort-by=cpu | head -n 10
+	@echo "\n3. Pod Resources (Memory):"
+	@kubectl top pods --all-namespaces --sort-by=memory | head -n 10
+	@echo "\n4. Resource Requests/Limits:"
+	@kubectl get pods --all-namespaces -o json | jq -r '.items[] | "\(.metadata.namespace)/\(.metadata.name): CPU=\(.spec.containers[].resources.requests.cpu)/\(.spec.containers[].resources.limits.cpu) Memory=\(.spec.containers[].resources.requests.memory)/\(.spec.containers[].resources.limits.memory)"'
+	@echo "\n=== End of Resource Usage Report ==="
+
+check-logs:
+	@echo "=== Recent Logs Report ==="
+	@echo "\n1. Client Layer Logs:"
+	@kubectl logs -n client-layer -l app=client --tail=5
+	@echo "\n2. Server Layer Logs:"
+	@kubectl logs -n server-layer -l app=server --tail=5
+	@echo "\n3. Data Layer Logs:"
+	@kubectl logs -n data-layer -l app=postgres --tail=5
+	@kubectl logs -n data-layer -l app=redis --tail=5
+	@kubectl logs -n server-layer -l app=rabbitmq --tail=5
+	@echo "\n4. Observability Layer Logs:"
+	@kubectl logs -n observability-layer -l app=prometheus --tail=5
+	@kubectl logs -n observability-layer -l app=grafana --tail=5
+	@echo "\n=== End of Logs Report ==="
+
+check-events:
+	@echo "=== Recent Events Report ==="
+	@kubectl get events --sort-by='.lastTimestamp' --all-namespaces | tail -n 20
+	@echo "\n=== End of Events Report ==="
 
 # Layer-specific status commands
 status-client:
@@ -182,14 +250,14 @@ test:
 	@./test_server.sh
 
 # New testing targets
-test-deployment: build
+test-deployment: create-cluster build
 	@echo "Running comprehensive deployment test..."
 	@echo "Loading images into Kind cluster..."
 	@kind load docker-image server:latest --name profile-service
 	@kind load docker-image client:latest --name profile-service
 	@kind load docker-image worker:latest --name profile-service
-	@chmod +x k8s/test-deployment.sh
-	@./k8s/test-deployment.sh
+	@chmod +x k8s/config/layers/scripts/test-deployment.sh
+	@./k8s/config/layers/scripts/test-deployment.sh
 
 test-validate:
 	@echo "Running setup validation..."
@@ -302,5 +370,48 @@ logs-grafana:
 	@kubectl logs -f -l app=grafana -n observability-layer 
 
 inspect-cluster:
-	@echo "Inspecting cluster state (pods, deployments, metrics) in all main namespaces..."
-	bash client/scripts/inspect-cluster.sh 
+	@echo "=== Cluster Inspection Report ==="
+	@echo "\n1. Namespace Status:"
+	@kubectl get namespaces -l layer
+	@echo "\n2. Pod Status by Layer:"
+	@echo "\nClient Layer:"
+	@kubectl get pods -n client-layer -o wide
+	@echo "\nServer Layer:"
+	@kubectl get pods -n server-layer -o wide
+	@echo "\nData Layer:"
+	@kubectl get pods -n data-layer -o wide
+	@echo "\nObservability Layer:"
+	@kubectl get pods -n observability-layer -o wide
+	@echo "\n3. Service Endpoints:"
+	@echo "\nClient Layer Services:"
+	@kubectl get svc -n client-layer
+	@echo "\nServer Layer Services:"
+	@kubectl get svc -n server-layer
+	@echo "\nData Layer Services:"
+	@kubectl get svc -n data-layer
+	@echo "\nObservability Layer Services:"
+	@kubectl get svc -n observability-layer
+	@echo "\n4. Network Policies:"
+	@kubectl get networkpolicies --all-namespaces
+	@echo "\n5. RBAC Configuration:"
+	@echo "\nService Accounts:"
+	@kubectl get serviceaccounts --all-namespaces -l layer
+	@echo "\nRoles:"
+	@kubectl get roles --all-namespaces
+	@echo "\nRoleBindings:"
+	@kubectl get rolebindings --all-namespaces
+	@echo "\n6. Resource Usage:"
+	@echo "\nNode Resources:"
+	@kubectl top nodes
+	@echo "\nPod Resources:"
+	@kubectl top pods --all-namespaces
+	@echo "\n7. Cross-Layer Communication:"
+	@echo "\nClient to Server:"
+	@kubectl exec -n client-layer $$(kubectl get pod -n client-layer -l app=client -o jsonpath='{.items[0].metadata.name}') -- curl -s http://server.server-layer:8080/health || echo "Connection failed"
+	@echo "\nServer to Data Layer:"
+	@kubectl exec -n server-layer $$(kubectl get pod -n server-layer -l app=server -o jsonpath='{.items[0].metadata.name}') -- sh -c 'nc -zv postgres.data-layer 5432 && nc -zv redis.data-layer 6379 && nc -zv rabbitmq.server-layer 5672' || echo "Connection failed"
+	@echo "\n8. Deployment Status:"
+	@kubectl get deployments --all-namespaces
+	@echo "\n9. Events (Last 10):"
+	@kubectl get events --sort-by='.lastTimestamp' --all-namespaces | tail -n 10
+	@echo "\n=== End of Cluster Inspection Report ===" 

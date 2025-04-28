@@ -55,9 +55,9 @@ func LoadConfig() (*Config, error) {
 	cfg.Cache.DB = getEnvAsInt("REDIS_DB", 0)
 
 	// Queue configuration
-	cfg.Queue.URI = getEnv("RABBITMQ_URI", "amqp://user:password@rabbitmq:5672/")
-	cfg.Queue.Username = getEnv("RABBITMQ_USERNAME", "user")
-	cfg.Queue.Password = getEnv("RABBITMQ_PASSWORD", "password")
+	cfg.Queue.URI = getEnv("RABBITMQ_URI", "amqp://guest:guest@rabbitmq.server-layer.svc.cluster.local:5672/?connection_timeout=10&retry_delay=5")
+	cfg.Queue.Username = getEnv("RABBITMQ_USERNAME", "guest")
+	cfg.Queue.Password = getEnv("RABBITMQ_PASSWORD", "guest")
 
 	return cfg, nil
 }

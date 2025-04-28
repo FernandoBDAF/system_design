@@ -78,7 +78,7 @@ spec:
                   name: server-redis-secret
                   key: password
             - name: RABBITMQ_URI
-              value: "amqp://guest:guest@rabbitmq.server-layer:5672/?connection_timeout=10&retry_delay=5"
+              value: "amqp://guest:guest@rabbitmq.data-layer.svc.cluster.local:5672/?connection_timeout=10&retry_delay=5"
             - name: POD_NAME
               valueFrom:
                 fieldRef:

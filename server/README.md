@@ -250,6 +250,51 @@ For more detailed information about specific aspects of the server, see:
 - kubectl
 - make
 
+### Development Environment
+
+#### Local Testing Setup (TODO)
+
+A docker-compose configuration is needed for local development and testing. This will help:
+
+1. Test service dependencies in isolation
+2. Verify connection handling and retry logic
+3. Debug startup sequence issues
+4. Validate configuration parameters
+
+Required components for docker-compose:
+
+- PostgreSQL container
+- Redis container
+- RabbitMQ container
+- Server container with hot-reload
+
+#### Known Issues
+
+1. **Dependency Initialization**:
+
+   - Current implementation fails fast on connection errors
+   - Need to implement proper retry logic
+   - Should add graceful fallbacks for non-critical services
+
+2. **Connection Management**:
+
+   - Add proper timeouts for all service connections
+   - Implement circuit breakers for resilience
+   - Add connection pooling configurations
+
+3. **Startup Sequence**:
+   - Review initialization order of services
+   - Add proper logging for startup steps
+   - Implement readiness checks before accepting traffic
+
+#### Next Steps
+
+1. Create docker-compose.yml with all required services
+2. Implement connection retry logic in main.go
+3. Add proper error handling for non-critical services
+4. Improve logging during startup sequence
+5. Add integration tests for service dependencies
+
 ### Development Workflow
 
 1. **Local Development**

@@ -21,13 +21,26 @@ Each component is deployed in its relevant namespace, and network policies/RBAC 
 
 **Visualization Model:**
 
-- Each namespace is rendered as a horizontal layer in the system diagram.
+- The system diagram now uses a hybrid layout:
+  - The right half of the diagram is dedicated to the `server-layer`, with its deployments and pods arranged vertically.
+  - The left half is split horizontally into three stacked sections for `client-layer`, `data-layer`, and `observability-layer`, with pods and deployments arranged horizontally within each section.
+- This layout visually emphasizes the central role of the server-layer and makes the relationships between layers clearer.
 - Pods are grouped by deployment within each namespace (using labels like `app` and `deployment`).
 - Standalone pods (not part of a deployment) are shown as individual circles in their namespace.
 - Pod-to-pod connections are visualized as lines, including cross-namespace connections (future improvements may enhance this logic).
 - For clarity, the visualization will limit the number of elements in a horizontal line (e.g., 4 per row) to avoid crowding.
 - Short names and CPU% metrics are shown for relevant pods.
 - Only pods from these four namespaces are visualized; system/default namespaces are excluded.
+
+**ASCII Diagram Example:**
+
+```
++----------------------+----------------------+
+| client-layer         |                      |
+| data-layer           |      server-layer     |
+| observability-layer  |   (vertical pods)     |
++----------------------+----------------------+
+```
 
 **Connection Logic:**
 
@@ -456,3 +469,40 @@ The system diagram is designed with the following principles and ideas:
   - Ensure the visualization helps users quickly understand system health, structure, and relationships.
 
 For more details on the current and planned features, see the code and commit history. Further enhancements are ongoing as part of an iterative, user-centered design process.
+
+## Alternative Layouts: Side-by-Side Layers
+
+- The current design uses a hybrid layout: the server-layer is given visual prominence on the right, while the other layers are stacked on the left.
+- The system is flexible and can be adapted as your architecture evolves.
+
+While the current system diagram stacks each namespace/layer vertically, the design is extensible and could support displaying multiple layers side-by-side (in the same horizontal line). This approach can be useful when:
+
+- Layers are conceptually peers (e.g., multiple frontends or independent services)
+- You want to show parallelism or symmetry in the architecture
+- You have many layers and want to save vertical space
+
+**Pros:**
+
+- More compact and visually balanced diagram
+- Highlights relationships between peer layers
+- Useful for architectures with "columns" (e.g., multi-tenant, multi-region)
+
+**Cons:**
+
+- Connection lines may become more complex (crossing lines, more visual clutter)
+- May reduce clarity if layers are not truly peers
+- Harder to maintain a strict "top-down" flow
+
+**Implementation:**
+
+- Define a layout map, e.g.:
+  ```js
+  const LAYER_ROWS = [
+    ["client-layer", "server-layer"], // Row 1: side by side
+    ["data-layer"], // Row 2
+    ["observability-layer"], // Row 3
+  ];
+  ```
+- Update the layout logic to center and space layers horizontally within each row
+
+The current design uses vertical stacking for clarity, but the system is flexible and can be adapted as your architecture evolves.

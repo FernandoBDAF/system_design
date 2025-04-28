@@ -23,7 +23,7 @@ spec:
           imagePullPolicy: Never
           env:
             - name: RABBITMQ_URI
-              value: "amqp://rabbitmq.server-layer.svc.cluster.local:5672"
+              value: "amqp://guest:guest@rabbitmq.data-layer.svc.cluster.local:5672/?connection_timeout=10&retry_delay=5"
             - name: DB_HOST
               value: "postgres.data-layer.svc.cluster.local"
           resources:

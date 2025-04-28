@@ -4,6 +4,46 @@
 
 This directory contains Kubernetes configurations for deploying the profile service application. The configurations are organized in a layer-based structure for better isolation and management.
 
+## Current Status (as of April 2025)
+
+### Successfully Deployed Components
+
+- **Namespaces**: All required namespaces (`client-layer`, `server-layer`, `data-layer`, `observability-layer`) created successfully
+- **Data Layer**: PostgreSQL, Redis, and RabbitMQ services deployed in `data-layer` namespace
+- **Network Policies**: Basic network policies implemented for cross-layer communication
+- **RBAC**: Service accounts and roles configured for component access
+
+### Known Issues
+
+1. **Server Layer**:
+
+   - Server pods experiencing startup issues due to dependency initialization
+   - Need to implement better connection retry logic and graceful fallbacks
+   - Current error: CrashLoopBackOff due to failed connections to data services
+
+2. **Metrics API**:
+   - Metrics API not fully available
+   - HPA configurations may not work until metrics-server is properly configured
+
+### Next Steps
+
+1. **Server Improvements**:
+
+   - Implement connection retries and timeouts for data services
+   - Add graceful fallback mechanisms for Redis and RabbitMQ
+   - Consider creating a docker-compose setup for local testing
+
+2. **Observability**:
+
+   - Complete metrics-server setup
+   - Implement proper health check endpoints
+   - Add more detailed logging for startup sequence
+
+3. **Testing**:
+   - Create comprehensive integration tests
+   - Implement automated deployment verification
+   - Add connection testing between layers
+
 ## Namespace Management
 
 The application uses multiple namespaces for different layers:
@@ -25,7 +65,7 @@ The application implements Role-Based Access Control (RBAC) across multiple file
    - Contains:
      - Server layer access to observability layer
      - Client layer access to server layer
-   - Location: `k8s/rbac.yaml`
+   - Location: `k8s/config/infrastructure/rbac.yaml`
 
 2. **`service-account.yaml`**
 
@@ -34,7 +74,7 @@ The application implements Role-Based Access Control (RBAC) across multiple file
      - `pod-reader` service accounts
      - Cluster roles for metrics access
      - Cluster role bindings
-   - Location: `k8s/service-account.yaml`
+   - Location: `k8s/config/infrastructure/service-account.yaml`
 
 3. **`metrics-server.yaml`**
 
@@ -43,14 +83,14 @@ The application implements Role-Based Access Control (RBAC) across multiple file
      - Metrics server service account
      - Cluster roles for metrics aggregation
      - Role bindings for API server authentication
-   - Location: `k8s/metrics-server.yaml`
+   - Location: `k8s/config/layers/observability/metrics-server.yaml`
 
 4. **`monitoring.yaml`**
    - Purpose: Prometheus service discovery permissions
    - Contains:
      - Service account configurations
      - RBAC settings for metrics collection
-   - Location: `k8s/monitoring.yaml`
+   - Location: `k8s/config/layers/observability/monitoring.yaml`
 
 ### Future Consolidation Plans
 
@@ -97,8 +137,8 @@ This directory contains all Kubernetes configurations for the profile service ap
 **Namespaces (Layers):**
 
 - `client-layer`: Frontend components (e.g., client)
-- `server-layer`: Application services (e.g., server, worker, rabbitmq)
-- `data-layer`: Databases and caches (e.g., postgresql, redis)
+- `server-layer`: Application services (e.g., server, worker)
+- `data-layer`: Databases, caches, and message queues (e.g., postgresql, redis, rabbitmq)
 - `observability-layer`: Monitoring and metrics (e.g., prometheus, grafana, metrics-server)
 
 Each component is deployed in its relevant namespace, and network policies/RBAC are set up to control cross-layer communication. This model provides:
@@ -122,8 +162,8 @@ Each component is deployed in its relevant namespace, and network policies/RBAC 
 - Each namespace is rendered as a horizontal layer in the system diagram.
 - Pods are grouped by deployment within each namespace (using labels like `app` and `deployment`).
 - Standalone pods (not part of a deployment) are shown as individual circles in their namespace.
-- Pod-to-pod connections are visualized as lines, including cross-namespace connections (future improvements may enhance this logic).
-- For clarity, the visualization will limit the number of elements in a horizontal line (e.g., 4 per row) to avoid crowding.
+- Pod-to-pod connections are visualized as lines, including cross-namespace connections.
+- For clarity, the visualization limits the number of elements in a horizontal line (e.g., 4 per row) to avoid crowding.
 - Short names and CPU% metrics are shown for relevant pods.
 - Only pods from these four namespaces are visualized; system/default namespaces are excluded.
 
@@ -135,6 +175,129 @@ Each component is deployed in its relevant namespace, and network policies/RBAC 
 **Legend/Key:**
 
 - The visualization may include a legend or key in the future to clarify the meaning of shapes, colors, and line styles, as the model evolves.
+
+---
+
+## Dynamic Connection Generation: Service Selector Inference
+
+### Overview
+
+To visualize real communication paths in your Kubernetes cluster, you can dynamically generate the `connections` array by analyzing Service objects and their selectors. This method reflects how traffic is routed in Kubernetes: Services use label selectors to target specific pods, and clients connect to Services, which then forward requests to the selected pods.
+
+### Step-by-Step Plan
+
+1. **Fetch Service and Pod Resources**
+
+   - Use the Kubernetes API (e.g., with `@kubernetes/client-node`) to list all `Service` and `Pod` resources in the cluster.
+   - For each Service, extract:
+     - `metadata.name`
+     - `metadata.namespace`
+     - `spec.selector` (the label selector)
+     - `spec.ports` (optional, for richer connection info)
+
+2. **Match Services to Target Pods**
+
+   - For each Service, find all Pods in the same namespace whose labels match the Service's selector.
+   - For each match, record a connection from the Service to the Pod.
+
+3. **(Optional) Infer Client Pods**
+
+   - If you want to show which pods are clients (initiators) of a Service, you can:
+     - Use naming conventions (e.g., `client` pods connect to `server` services).
+     - Parse environment variables or ConfigMaps for service endpoints.
+     - (Advanced) Use network policies or traffic logs.
+
+4. **Build the Connections Array**
+
+   - Each connection can be represented as:
+     ```json
+     {
+       "source": "<source-pod-or-service-name>",
+       "target": "<target-pod-name>",
+       "type": "service"
+     }
+     ```
+   - For a simple model, use the Service as the source and each selected Pod as the target.
+
+5. **Integrate with Visualization**
+
+   - Pass the dynamically generated `connections` array to the frontend visualization.
+   - Optionally, distinguish between direct pod-to-pod and service-to-pod connections with different line styles or colors.
+
+6. **Fallback to Mock Data**
+   - If the cluster API is unavailable, fallback to the static mock data for demo or development purposes.
+
+### Example: Service Selector Inference
+
+Suppose you have the following Service and Pods:
+
+**Service:**
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: profile-server
+  namespace: server-layer
+spec:
+  selector:
+    app: profile-server
+```
+
+**Pods:**
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: profile-server-abc123
+  namespace: server-layer
+  labels:
+    app: profile-server
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: profile-server-def456
+  namespace: server-layer
+  labels:
+    app: profile-server
+```
+
+**Inferred Connections:**
+
+```json
+[
+  {
+    "source": "profile-server",
+    "target": "profile-server-abc123",
+    "type": "service"
+  },
+  {
+    "source": "profile-server",
+    "target": "profile-server-def456",
+    "type": "service"
+  }
+]
+```
+
+### Implementation Notes
+
+- Use the official Kubernetes client libraries (e.g., `@kubernetes/client-node` for Node.js) to fetch resources.
+- For large clusters, consider caching or paginating API requests.
+- This approach can be extended to include other resource types (e.g., Ingress, NetworkPolicy) for richer diagrams.
+
+### Benefits
+
+- **Accurate:** Reflects actual service-to-pod routing in the cluster.
+- **Automated:** No need for manual connection definitions.
+- **Extensible:** Can be enhanced with more advanced inference (e.g., traffic logs, network policies).
+
+### Next Steps
+
+- Implement the above logic in your backend API.
+- Update the frontend to consume the new dynamic `connections` array.
+- Document any assumptions or limitations in the README.
 
 ---
 
@@ -195,22 +358,16 @@ This section outlines a systematic approach to implementing and verifying Kubern
   - Map communication patterns between components
   - Identify resource requirements and constraints
   - Document security requirements
-  - **NEW: Image Size Analysis**
-    - Review Dockerfile optimization opportunities
-    - Plan multi-stage builds
-    - Consider base image selection
-    - Document build time and size targets
-
-- **Namespace Planning**
-  - Group components by function and security requirements
-  - Define cross-namespace communication needs
-  - Plan resource quotas and limits
-  - Document namespace-specific configurations
-  - **NEW: Layer Labeling Strategy**
-    - Define consistent label schema
-    - Plan for observability integration
-    - Document label usage patterns
-    - Consider future scaling needs
+  - **Layer Organization**
+    - Group components by function and security requirements
+    - Define cross-layer communication needs
+    - Plan resource quotas and limits
+    - Document layer-specific configurations
+    - **Layer Labeling Strategy**
+      - Use consistent label schema (`client`, `server`, `data`, `observability`)
+      - Plan for observability integration
+      - Document label usage patterns
+      - Consider future scaling needs
 
 ### 2. Configuration Phase
 
@@ -419,6 +576,80 @@ For more detailed information about specific aspects of the Kubernetes configura
    ```
    Server Layer → Data Layer (PostgreSQL/Redis)
    ```
+
+## Current State & Future Work
+
+### Current Implementation Status
+
+1. **Successfully Deployed Components**
+
+   - Layer-based namespace structure is fully operational
+   - All required secrets are properly created:
+     - `postgres-secret` in `data-layer`
+     - `redis-secret` in `data-layer`
+     - `grafana-secret` in `observability-layer`
+   - Network policies are correctly applied:
+     - `allow-client-to-server`
+     - `allow-server-egress`
+     - `allow-data-ingress`
+     - `allow-observability-ingress`
+     - `allow-metrics-scraping`
+   - Data layer components are running:
+     - PostgreSQL StatefulSet with persistent storage
+     - Redis Deployment with persistent storage
+     - RabbitMQ StatefulSet
+   - Server layer infrastructure is created:
+     - Server service
+     - Server Redis secret
+     - Server deployment
+     - Server HPA
+     - Worker deployment
+
+2. **Current Challenges**
+
+   a. **Server Layer Deployment**
+
+   - Server pods are not becoming ready
+   - Need to investigate readiness probe configuration
+   - Verify service account permissions
+   - Check resource limits and requests
+
+   b. **Metrics Integration**
+
+   - Metrics API not available during deployment
+   - Resource usage monitoring not functional
+   - Need to implement metrics server
+   - Configure proper metrics scraping
+
+   c. **Database Configuration**
+
+   - PostgreSQL readiness probe needs optimization
+   - Database initialization timing issues
+   - Need to verify connection strings
+   - Check persistent volume claims
+
+3. **Next Steps**
+
+   a. **Immediate Actions**
+
+   - Debug server pod readiness issues
+   - Verify service account permissions
+   - Check resource configurations
+   - Implement proper metrics server
+
+   b. **Short Term Improvements**
+
+   - Optimize database readiness probes
+   - Implement proper metrics collection
+   - Enhance error handling
+   - Add proper logging
+
+   c. **Long Term Goals**
+
+   - Implement comprehensive monitoring
+   - Add automated testing
+   - Enhance security configurations
+   - Optimize resource usage
 
 ## Configuration & Guardrails
 
@@ -916,38 +1147,56 @@ The project uses a centralized Makefile for managing all infrastructure operatio
 # Cluster Management
 make create-cluster    # Create a new Kind cluster
 make delete-cluster   # Delete the Kind cluster
+make clean           # Clean up Kubernetes resources
+make clean-all       # Clean up all resources (Kubernetes, Docker, and cluster)
 
-# Build and Deployment
+# Build & Deployment
 make build           # Build all components
 make start          # Start the entire stack
 make stop           # Stop the entire stack
 make restart        # Restart the entire stack
 
-# Status and Monitoring
+# Status & Inspection
 make status         # Check status of all components
-make status-client  # Check client layer status
-make status-server  # Check server layer status
-make status-data    # Check data layer status
-make status-observability  # Check observability layer status
+make inspect-cluster # Comprehensive cluster inspection
+make check-health   # Check health of all components
+make check-connectivity # Test connectivity between layers
+make check-resources # Check resource usage
+make check-logs     # Show recent logs from all components
+make check-events   # Show recent cluster events
 
-# Logging
-make logs           # View component logs
-make logs-layer     # View layer-specific logs
-make logs-server    # View server logs
-make logs-prometheus # View Prometheus logs
-make logs-grafana   # View Grafana logs
+# Layer-Specific Status
+make status-client  # Check status of client layer
+make status-server  # Check status of server layer
+make status-data    # Check status of data layer
+make status-observability # Check status of observability layer
+make logs-layer     # View logs for a specific layer
 
-# Testing
+# Testing & Validation
 make test           # Run API tests
 make test-deployment # Run comprehensive deployment test
-make test-validate  # Validate initial setup
+make test-validate  # Validate initial setup requirements
 make test-verify    # Verify deployment state
-make test-cross-layer # Test cross-layer communication
-make test-observability # Test observability setup
+make test-cache     # Run cache tests
+make test-update    # Run update tests
+make test-monitoring # Run monitoring and metrics tests
+make test-metrics-api # Test metrics API endpoints
 
-# Cleanup
-make clean          # Clean up Kubernetes resources
-make clean-all      # Clean up all resources
+# Service Access
+make port-forward   # Start port forwarding for all services
+make delete-profile # Delete a profile by ID
+make get-profiles   # Get all profiles
+
+# Logging
+make logs           # View logs for a component
+make logs-server    # Show server logs in real-time
+make logs-prometheus # Show Prometheus logs
+make logs-grafana   # Show Grafana logs
+
+# Resource Management
+make scale-server-down # Scale down the server deployment
+make scale-server-up   # Scale up the server deployment
+make get-pod-metrics  # Get metrics for all pods in the namespace
 ```
 
 ### Usage Examples
@@ -965,8 +1214,12 @@ make clean-all      # Clean up all resources
 
    ```bash
    make status         # Check overall status
-   make logs-layer LAYER=server  # View server layer logs
-   make get-pod-metrics # Check resource usage
+   make inspect-cluster # Comprehensive cluster inspection
+   make check-health   # Check component health
+   make check-connectivity # Test layer connectivity
+   make check-resources # Check resource usage
+   make check-logs     # View recent logs
+   make check-events   # View recent events
    ```
 
 3. **Testing**
@@ -975,6 +1228,7 @@ make clean-all      # Clean up all resources
    make test-validate  # Validate setup
    make test-deployment # Test deployment
    make test-verify    # Verify deployment
+   make test-monitoring # Test monitoring setup
    ```
 
 4. **Cleanup**
@@ -983,6 +1237,46 @@ make clean-all      # Clean up all resources
    make clean         # Clean resources
    make delete-cluster # Remove cluster
    ```
+
+### New Diagnostic Commands
+
+The following new commands provide focused diagnostic capabilities:
+
+1. **`make check-health`**
+
+   - Checks pod health and restarts
+   - Verifies service endpoints
+   - Validates network policies
+   - Shows container status
+
+2. **`make check-connectivity`**
+
+   - Tests client to server communication
+   - Verifies server to data layer connections
+   - Checks DNS resolution
+   - Tests cross-layer communication
+
+3. **`make check-resources`**
+
+   - Shows node resource usage
+   - Displays pod resource consumption
+   - Lists resource requests and limits
+   - Sorts by CPU and memory usage
+
+4. **`make check-logs`**
+
+   - Shows recent logs from all layers
+   - Displays last 5 lines per component
+   - Organized by layer
+   - Quick log inspection
+
+5. **`make check-events`**
+   - Shows last 20 cluster events
+   - Sorted by timestamp
+   - Helps identify recent issues
+   - Quick event inspection
+
+These commands complement the existing `make status` and `make inspect-cluster` commands, providing more focused diagnostic capabilities for specific aspects of the cluster.
 
 ## Shell Scripts
 
@@ -1009,7 +1303,8 @@ The Kubernetes configuration includes several shell scripts to automate deployme
      - Creates required secrets and configmaps
      - Deploys and verifies each layer
      - Tests cross-layer communication
-     - Verifies resource allocation and observability setup
+     - Verifies resource allocation
+     - Validate observability setup
    - Usage: `make test-deployment` or `./k8s/test-deployment.sh`
 
 3. **validate-setup.sh**
@@ -1082,3 +1377,431 @@ test-validate:
    - Secrets are created with proper namespaces
    - Network policies are verified during testing
    - Service accounts are validated before deployment
+
+## Network Policies
+
+The application implements network policies to control traffic between layers:
+
+1. **`allow-client-to-server`**
+
+   - Location: `server-layer` namespace
+   - Purpose: Allows client layer to access server layer on port 8080
+
+2. **`allow-server-egress`**
+
+   - Location: `server-layer` namespace
+   - Purpose: Controls outbound traffic from server layer to:
+     - Data layer (ports 5432, 6379, 5672, 15672)
+     - Observability layer (ports 9090, 3000)
+
+3. **`allow-data-ingress`**
+
+   - Location: `data-layer` namespace
+   - Purpose: Allows server layer to access data layer services on:
+     - PostgreSQL (port 5432)
+     - Redis (port 6379)
+     - RabbitMQ (ports 5672, 15672)
+
+4. **`allow-observability-ingress`**
+
+   - Location: `observability-layer` namespace
+   - Purpose: Allows all layers to access observability tools on ports 9090 and 3000
+
+5. **`allow-metrics-scraping`**
+   - Location: `server-layer` namespace
+   - Purpose: Allows observability layer to scrape metrics from server pods on port 8081
+
+## Scripts Restructuring Plan
+
+### Current State
+
+The deployment and testing scripts are currently located in `k8s/config/layers/scripts/`:
+
+- `apply-layers.sh`: Main deployment orchestrator
+- `test-deployment.sh`: Comprehensive deployment testing
+- `validate-setup.sh`: Prerequisites validation
+
+### Planned Improvements
+
+#### 1. Script Organization and Responsibilities
+
+##### A. Deployment Scripts
+
+1. **`apply-layers.sh`**
+
+   - Purpose: Main deployment orchestrator
+   - Responsibilities:
+     - Apply namespaces and network policies
+     - Create required secrets and configmaps
+     - Deploy components in correct order:
+       1. Data layer (PostgreSQL, Redis, RabbitMQ)
+       2. Server layer (Server, Worker)
+       3. Client layer (Client)
+       4. Observability layer (Prometheus, Grafana)
+
+2. **`test-deployment.sh`**
+
+   - Purpose: Comprehensive deployment testing
+   - Responsibilities:
+     - Validate initial setup
+     - Test namespace creation
+     - Verify network policies
+     - Test layer-by-layer deployment
+     - Verify cross-layer communication
+     - Check resource allocation
+     - Validate observability setup
+
+3. **`validate-setup.sh`**
+   - Purpose: Prerequisites validation
+   - Responsibilities:
+     - Check required commands (kubectl, docker, make)
+     - Verify Kubernetes cluster status
+     - Check namespace existence
+     - Validate Docker images
+     - Check file permissions
+
+#### 2. Script Improvements
+
+##### A. Error Handling
+
+1. Implement consistent error handling across all scripts
+2. Add proper exit codes for different failure scenarios
+3. Improve error messages with context
+4. Add logging to file for debugging
+
+##### B. Testing Enhancements
+
+1. Add retry mechanisms for flaky operations
+2. Implement timeout handling
+3. Add resource cleanup on failure
+4. Improve cross-layer communication tests
+
+##### C. Documentation
+
+1. Add detailed comments in scripts
+2. Create usage examples
+3. Document dependencies and requirements
+4. Add troubleshooting guides
+
+#### 3. Makefile Integration
+
+##### A. Update Makefile Targets
+
+1. Update paths to reflect new script locations
+2. Add new targets for specific operations
+3. Implement proper dependency chain
+4. Add help documentation
+
+##### B. New Makefile Structure
+
+```makefile
+# Deployment
+deploy: validate deploy-layers verify
+
+# Testing
+test: test-validate test-deployment test-verify
+
+# Validation
+validate: check-prerequisites check-cluster check-namespaces
+
+# Layer-specific
+deploy-data: validate deploy-postgres deploy-redis deploy-rabbitmq
+deploy-server: validate deploy-server deploy-worker
+deploy-client: validate deploy-client
+deploy-observability: validate deploy-prometheus deploy-grafana
+```
+
+#### 4. Implementation Phases
+
+##### Phase 1: Script Organization
+
+1. Move scripts to new location ✓
+2. Update script paths in Makefile
+3. Test basic functionality
+4. Document new structure
+
+##### Phase 2: Error Handling
+
+1. Implement consistent error handling
+2. Add logging functionality
+3. Test error scenarios
+4. Document error codes
+
+##### Phase 3: Testing Enhancements
+
+1. Add retry mechanisms
+2. Implement timeouts
+3. Add cleanup procedures
+4. Test failure scenarios
+
+##### Phase 4: Documentation
+
+1. Add script documentation
+2. Create usage examples
+3. Document dependencies
+4. Add troubleshooting guides
+
+#### 5. Testing Plan
+
+##### A. Validation Testing
+
+1. Test script execution from new locations
+2. Verify Makefile integration
+3. Test error handling
+4. Verify logging functionality
+
+##### B. Deployment Testing
+
+1. Test full deployment flow
+2. Verify layer dependencies
+3. Test rollback scenarios
+4. Verify resource cleanup
+
+##### C. Integration Testing
+
+1. Test cross-layer communication
+2. Verify observability setup
+3. Test resource allocation
+4. Verify security policies
+
+#### 6. Rollout Strategy
+
+1. Create backup of current scripts
+2. Implement changes in development environment
+3. Test thoroughly
+4. Deploy to staging
+5. Monitor for issues
+6. Deploy to production
+
+#### 7. Success Criteria
+
+1. All scripts execute successfully from new locations
+2. Makefile targets work as expected
+3. Error handling provides clear feedback
+4. Testing covers all scenarios
+5. Documentation is complete and accurate
+6. No regression in functionality
+
+## Script Comparison & Deployment Strategies
+
+### Deployment Scripts Overview
+
+The project includes two main deployment scripts with distinct purposes and capabilities:
+
+1. **`apply-layers.sh`**
+
+   - **Purpose:** Main deployment orchestrator
+   - **Key Features:**
+     - Parallel deployment where possible
+     - Basic error handling with `set -e`
+     - Resource readiness checking
+     - Layer-by-layer deployment
+   - **Deployment Order:**
+     1. Namespaces and network policies
+     2. Secrets and configmaps
+     3. Data layer components (PostgreSQL, Redis, RabbitMQ)
+     4. Server layer components (Server, Worker)
+     5. Client layer components
+     6. Observability layer components
+
+2. **`test-deployment.sh`**
+   - **Purpose:** Comprehensive testing and validation
+   - **Key Features:**
+     - Sequential deployment with verification
+     - Detailed error reporting with color coding
+     - Comprehensive resource checking
+     - Cross-layer communication testing
+   - **Additional Capabilities:**
+     - Pod status verification
+     - Endpoint checking
+     - Network policy validation
+     - Resource usage monitoring
+     - TCP connectivity testing
+     - Health checks for monitoring tools
+
+### Deployment Strategy Options
+
+1. **Parallel Deployment**
+
+   - **Current Implementation:**
+     - Data layer components run in parallel
+     - Server and worker deployments run in parallel
+     - Client deployment runs sequentially
+   - **Optimization Options:**
+     - Client can run in parallel with server/worker
+     - Observability components can run in parallel
+     - Cross-layer dependencies are maintained
+
+2. **Sequential Deployment**
+   - **Current Implementation:**
+     - Used in test-deployment.sh
+     - Ensures proper dependency order
+     - Provides detailed verification
+   - **Use Cases:**
+     - Initial deployment testing
+     - Troubleshooting
+     - Validation scenarios
+
+### Best Practices
+
+1. **For Production Deployments:**
+
+   - Use `apply-layers.sh` for faster deployments
+   - Leverage parallel deployment where possible
+   - Maintain proper dependency order
+   - Monitor resource usage
+
+2. **For Testing and Validation:**
+
+   - Use `test-deployment.sh` for comprehensive testing
+   - Verify all components and connections
+   - Check resource allocation
+   - Validate security policies
+
+3. **For Development:**
+   - Consider combining best features of both scripts
+   - Implement proper error handling
+   - Add comprehensive testing
+   - Maintain deployment speed
+
+## Client Implementation Requirements
+
+### Kubernetes API Access
+
+The client component requires specific configuration to access the Kubernetes API and fetch pod information. Here are the key requirements:
+
+1. **Service Account Configuration**
+
+   - The client pod must use the `client-layer` service account
+   - The service account must have the following permissions:
+     - `get`, `list`, `watch` on pods in all layer namespaces
+     - `get`, `list`, `watch` on services in all layer namespaces
+     - Access to metrics API for pod metrics
+
+2. **Environment Variables**
+   Required environment variables in the client deployment:
+
+   ```yaml
+   env:
+     - name: NEXT_PUBLIC_API_URL
+       value: "http://server.server-layer.svc.cluster.local:8080"
+     - name: NEXT_PUBLIC_WS_URL
+       value: "ws://server.server-layer.svc.cluster.local:8080/ws"
+     - name: NAMESPACE
+       valueFrom:
+         fieldRef:
+           fieldPath: metadata.namespace
+     - name: KUBERNETES_SERVICE_HOST
+       value: "kubernetes.default.svc"
+     - name: KUBERNETES_SERVICE_PORT
+       value: "443"
+   ```
+
+3. **Volume Mounts**
+   Required volume mounts for Kubernetes API access:
+
+   ```yaml
+   volumeMounts:
+     - name: kube-api-access
+       mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+       readOnly: true
+   volumes:
+     - name: kube-api-access
+       projected:
+         sources:
+           - serviceAccountToken:
+               expirationSeconds: 3600
+               path: token
+           - configMap:
+               name: kube-root-ca.crt
+               items:
+                 - key: ca.crt
+                   path: ca.crt
+           - downwardAPI:
+               items:
+                 - path: namespace
+                   fieldRef:
+                     fieldPath: metadata.namespace
+   ```
+
+4. **Kubernetes Client Configuration**
+   The client should use the following configuration pattern:
+
+   ```typescript
+   const kc = new KubeConfig();
+   if (process.env.KUBERNETES_SERVICE_HOST) {
+     kc.loadFromCluster(); // When running in a pod
+   } else {
+     kc.loadFromDefault(); // For local development
+   }
+   ```
+
+5. **Namespace Handling**
+   The client should fetch pods from these namespaces:
+
+   - `client-layer`
+   - `server-layer`
+   - `data-layer`
+   - `observability-layer`
+
+6. **Error Handling**
+
+   - Implement proper error handling for API calls
+   - Log errors for debugging
+   - Fall back to mock data only when necessary
+   - Provide clear error messages in the UI
+
+7. **Data Structure**
+   Each pod object should include:
+
+   ```typescript
+   {
+     name: string;
+     status: string;
+     ready: boolean;
+     restarts: number;
+     age: string;
+     type: string;
+     namespace: string;
+     labels: Record<string, string>;
+   }
+   ```
+
+8. **Health Checks**
+   Configure proper health checks:
+
+   ```yaml
+   livenessProbe:
+     httpGet:
+       path: /
+       port: http
+     initialDelaySeconds: 60
+     periodSeconds: 15
+     timeoutSeconds: 5
+   readinessProbe:
+     httpGet:
+       path: /
+       port: http
+     initialDelaySeconds: 30
+     periodSeconds: 10
+     timeoutSeconds: 5
+   ```
+
+9. **Resource Requirements**
+
+   ```yaml
+   resources:
+     requests:
+       memory: "256Mi"
+       cpu: "200m"
+     limits:
+       memory: "512Mi"
+       cpu: "500m"
+   ```
+
+10. **Testing**
+    - Test the client in both local and cluster environments
+    - Verify service account permissions
+    - Test error scenarios and fallback behavior
+    - Validate metrics collection
+    - Test cross-namespace pod listing

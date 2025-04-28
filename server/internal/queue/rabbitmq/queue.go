@@ -3,6 +3,7 @@ package rabbitmq
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/fernandobarroso/profile-service/internal/api/middleware/logger"
@@ -21,9 +22,26 @@ type Queue struct {
 
 // NewQueue creates a new RabbitMQ queue
 func NewQueue(cfg *config.Config) (*Queue, error) {
-	conn, err := amqp091.Dial(cfg.Queue.URI)
+	var conn *amqp091.Connection
+	var err error
+	maxRetries := 5
+	retryDelay := 5 * time.Second
+
+	for i := 0; i < maxRetries; i++ {
+		conn, err = amqp091.Dial(cfg.Queue.URI)
+		if err == nil {
+			break
+		}
+		logger.Log.Warn("Failed to connect to RabbitMQ, retrying...",
+			zap.Int("attempt", i+1),
+			zap.Int("max_retries", maxRetries),
+			zap.Error(err),
+		)
+		time.Sleep(retryDelay)
+	}
+
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to connect to RabbitMQ after %d attempts: %v", maxRetries, err)
 	}
 
 	channel, err := conn.Channel()

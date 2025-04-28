@@ -17,7 +17,7 @@ spec:
         app: client
         layer: frontend
     spec:
-      serviceAccountName: pod-reader
+      serviceAccountName: client-layer
       containers:
         - name: client
           image: client:latest

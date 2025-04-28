@@ -1,3 +1,8 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: client-layer
+  namespace: client-layer
 ---
 # Role for server-layer to access observability-layer
 apiVersion: rbac.authorization.k8s.io/v1
@@ -52,4 +57,28 @@ subjects:
 roleRef:
   kind: Role
   name: server-access
+  apiGroup: rbac.authorization.k8s.io
+---
+# Role for client-layer to access pod information
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pod-reader
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+# Role binding for client-layer service account
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: client-layer-pod-reader
+subjects:
+  - kind: ServiceAccount
+    name: client-layer
+    namespace: client-layer
+roleRef:
+  kind: ClusterRole
+  name: pod-reader
   apiGroup: rbac.authorization.k8s.io

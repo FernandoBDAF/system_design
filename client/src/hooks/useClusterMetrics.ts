@@ -1,10 +1,18 @@
 import { useEffect, useState } from "react";
 import type { PodWithMetrics } from "../types/podWithMetrics";
 
+interface MetricsResponse {
+  data: PodWithMetrics[];
+  isMocked: boolean;
+  reason?: string;
+}
+
 export function useClusterMetrics() {
   const [data, setData] = useState<PodWithMetrics[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isMocked, setIsMocked] = useState(false);
+  const [mockReason, setMockReason] = useState<string | undefined>();
 
   const fetchMetrics = async () => {
     console.log("[useClusterMetrics] Starting metrics fetch...");
@@ -23,17 +31,21 @@ export function useClusterMetrics() {
           `Failed to fetch cluster metrics: ${res.status} ${res.statusText}`
         );
       }
-      const json = await res.json();
+      const json: MetricsResponse = await res.json();
       console.log("[useClusterMetrics] Received metrics data:", {
-        podCount: json.length,
-        pods: json.map((p: PodWithMetrics) => ({
+        podCount: json.data.length,
+        isMocked: json.isMocked,
+        reason: json.reason,
+        pods: json.data.map((p: PodWithMetrics) => ({
           name: p.name,
           cpu: p.cpu,
           memory: p.memory,
           status: p.status,
         })),
       });
-      setData(json);
+      setData(json.data);
+      setIsMocked(json.isMocked);
+      setMockReason(json.reason);
     } catch (err) {
       console.error("[useClusterMetrics] Error fetching metrics:", err);
       setError(err instanceof Error ? err.message : "Unknown error");
@@ -53,5 +65,5 @@ export function useClusterMetrics() {
     };
   }, []);
 
-  return { data, loading, error };
+  return { data, loading, error, isMocked, mockReason };
 }

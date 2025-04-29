@@ -14,6 +14,7 @@ interface SystemVisualizationProps {
   connections: Link[];
   requestsPerSecond: number;
   isMockedData?: boolean;
+  mockReason?: string;
 }
 
 const SystemVisualization: React.FC<SystemVisualizationProps> = ({
@@ -81,11 +82,13 @@ const SystemVisualization: React.FC<SystemVisualizationProps> = ({
     Object.entries(podsByLayer).forEach(([layer, pods]) => {
       const deployments: Record<string, PodWithMetrics[]> = {};
       pods.forEach((pod) => {
-        // Group by deployment name
-        if (pod.isDeploymentPod || pod.deployment) {
-          const deploymentName = pod.deployment || pod.name.split("-")[0];
-          if (!deployments[deploymentName]) deployments[deploymentName] = [];
-          deployments[deploymentName].push(pod);
+        // Group if it's part of a deployment (either directly or via ReplicaSet)
+        if (
+          (pod.ownerKind === "Deployment" || pod.ownerKind === "ReplicaSet") &&
+          pod.deployment
+        ) {
+          if (!deployments[pod.deployment]) deployments[pod.deployment] = [];
+          deployments[pod.deployment].push(pod);
         }
       });
       byLayer[layer] = deployments;
@@ -93,16 +96,43 @@ const SystemVisualization: React.FC<SystemVisualizationProps> = ({
     return byLayer;
   }, [podsByLayer]);
 
-  // Standalone pods by layer (only truly standalone pods)
+  // Standalone pods by layer (anything not in a deployment)
   const standalonePodsByLayer = useMemo(() => {
     const byLayer: Record<string, PodWithMetrics[]> = {};
     Object.entries(podsByLayer).forEach(([layer, pods]) => {
       byLayer[layer] = pods.filter(
-        (pod) => !pod.isDeploymentPod && !pod.deployment
+        (pod) =>
+          !(pod.ownerKind === "Deployment" || pod.ownerKind === "ReplicaSet") ||
+          !pod.deployment
       );
     });
     return byLayer;
   }, [podsByLayer]);
+
+  // Helper function to determine if a pod group should show a load balancer
+  function shouldShowLoadBalancer(pods: PodWithMetrics[]): boolean {
+    if (!pods.length) return false;
+
+    // Get the first pod as reference (they should all have same owner/service)
+    const pod = pods[0];
+
+    // Rule 1: Must be part of a Deployment (not StatefulSet)
+    if (pod.ownerKind !== "Deployment") {
+      return false;
+    }
+
+    // Rule 2: Must have multiple replicas
+    if (!pod.replicas || pod.replicas <= 1) {
+      return false;
+    }
+
+    // Rule 3: Must have a non-headless service
+    if (!pod.service || pod.service.type === "Headless") {
+      return false;
+    }
+
+    return true;
+  }
 
   useEffect(() => {
     if (!svgRef.current) return;
@@ -186,49 +216,53 @@ const SystemVisualization: React.FC<SystemVisualizationProps> = ({
         Math.max(0, (leftWidth - contentStartX - totalContentWidth) / 2);
       // Draw deployments (horizontally)
       deploymentGroups.forEach((group) => {
+        const shouldShowLB = shouldShowLoadBalancer(group.pods);
         const lbX = xCursor + group.width / 2;
         const lbY = yBase + 60;
-        // Draw load balancer (square)
-        svg
-          .append("rect")
-          .attr("x", lbX - lbSize / 2)
-          .attr("y", lbY)
-          .attr("width", lbSize)
-          .attr("height", lbSize)
-          .attr("fill", "#F1F5F9")
-          .attr("stroke", "#6366F1")
-          .attr("stroke-width", 3)
-          .attr("tabindex", 0)
-          .attr("aria-label", `Deployment: ${group.name}`)
-          .attr("class", "viz-lb")
-          .on("mousemove", (event) => {
-            setTooltip({
-              visible: true,
-              x: event.clientX,
-              y: event.clientY - 30,
-              content: (
-                <div>
-                  <div className="font-semibold text-indigo-700">
-                    Deployment: {group.name}
+
+        if (shouldShowLB) {
+          // Draw load balancer (square)
+          svg
+            .append("rect")
+            .attr("x", lbX - lbSize / 2)
+            .attr("y", lbY)
+            .attr("width", lbSize)
+            .attr("height", lbSize)
+            .attr("fill", "#F1F5F9")
+            .attr("stroke", "#6366F1")
+            .attr("stroke-width", 3)
+            .attr("tabindex", 0)
+            .attr("aria-label", `Deployment: ${group.name}`)
+            .attr("class", "viz-lb")
+            .on("mousemove", (event) => {
+              setTooltip({
+                visible: true,
+                x: event.clientX,
+                y: event.clientY - 30,
+                content: (
+                  <div>
+                    <div className="font-semibold text-indigo-700">
+                      Deployment: {group.name}
+                    </div>
+                    <div className="text-xs text-gray-700">
+                      Pods: {group.pods.length}
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-700">
-                    Pods: {group.pods.length}
-                  </div>
-                </div>
-              ),
-            });
-          })
-          .on("mouseleave", () =>
-            setTooltip((t) => ({ ...t, visible: false }))
-          );
-        svg
-          .append("text")
-          .attr("x", lbX)
-          .attr("y", lbY + lbSize + 16)
-          .attr("text-anchor", "middle")
-          .attr("font-size", 13)
-          .attr("fill", "#6366F1")
-          .text(group.name);
+                ),
+              });
+            })
+            .on("mouseleave", () =>
+              setTooltip((t) => ({ ...t, visible: false }))
+            );
+          svg
+            .append("text")
+            .attr("x", lbX)
+            .attr("y", lbY + lbSize + 16)
+            .attr("text-anchor", "middle")
+            .attr("font-size", 13)
+            .attr("fill", "#6366F1")
+            .text(group.name);
+        }
         // Pods below the load balancer
         group.pods.forEach((pod, j) => {
           const podX = xCursor + j * (podRadius * 2 + 32) + podRadius;

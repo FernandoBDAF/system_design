@@ -25,11 +25,17 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   const [activeTab, setActiveTab] = useState<TabType>("traffic");
   const [isLoading, setIsLoading] = useState(false);
 
-  const { data: clusterPods, loading, error } = useClusterMetrics();
+  const {
+    data: clusterPods,
+    loading,
+    error,
+    isMocked,
+    mockReason,
+  } = useClusterMetrics();
 
   // Choose which pods to use
-  const podsToUse: PodWithMetrics[] =
-    isMockedData || !clusterPods ? mockPods : clusterPods;
+  const podsToUse: PodWithMetrics[] = clusterPods || mockPods;
+  const isShowingMockData = isMockedData || isMocked;
 
   // Debug logs
   useEffect(() => {
@@ -38,10 +44,20 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
       podCount: clusterPods?.length || 0,
       loading,
       error: error || null,
-      isMockedData,
+      isMocked,
+      mockReason,
+      isShowingMockData,
       activeTab,
     });
-  }, [clusterPods, loading, error, isMockedData, activeTab]);
+  }, [
+    clusterPods,
+    loading,
+    error,
+    isMocked,
+    mockReason,
+    isShowingMockData,
+    activeTab,
+  ]);
 
   const handleTabChange = (tabId: TabType) => {
     if (tabId === activeTab) return;
@@ -77,10 +93,10 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
   return (
     <div className="h-screen w-full bg-gray-100">
-      {(!!error || isMockedData) && (
+      {isShowingMockData && (
         <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4">
-          <strong>Warning:</strong> Showing mocked data due to cluster metrics
-          fetch failure.
+          <strong>Warning:</strong> Showing mocked data
+          {mockReason ? ` (${mockReason})` : ""}
         </div>
       )}
       <div className="grid grid-cols-12 gap-4 h-full p-4">
@@ -95,7 +111,8 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
               pods={podsToUse}
               connections={connections}
               requestsPerSecond={requestsPerSecond}
-              isMockedData={!!error || isMockedData}
+              isMockedData={isShowingMockData}
+              mockReason={mockReason}
             />
           )}
         </div>

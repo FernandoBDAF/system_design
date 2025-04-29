@@ -6,12 +6,15 @@
 
 The Profile Service Client is a web-based dashboard for real-time monitoring and management of the Profile Service, providing a user-friendly interface for system visualization, metrics monitoring, and traffic control.
 
-### Current Status 🟢
+### Current Status 🟡
 
-- **Service Status**: Healthy and deployed in `client-layer` namespace
-- **Data Flow**: Real-time metrics and pod information successfully streaming
-- **UI Access**: Dashboard fully functional with all core features
-- **RBAC**: Service account permissions properly configured for cross-namespace access
+- **Service Status**: Operational with some permission limitations
+- **Data Flow**: Real-time metrics and pod information streaming with fallback mechanisms
+- **UI Access**: Dashboard functional with all core features
+- **RBAC**: Service account permissions configured for cross-namespace access, with limited StatefulSet access
+  - StatefulSet access is namespace-specific
+  - Fallback mechanisms handle limited permissions gracefully
+  - No impact on core visualization functionality
 
 ### Recent Achievements ✅
 
@@ -59,20 +62,66 @@ Our system uses a four-layer namespace model for clear organization and isolatio
 ### 1. System Visualization
 
 - Real-time pod status and metrics display
+
   - Accurate pod status based on container state
   - Warning status for waiting/not-ready containers
-  - Error status for CrashLoopBackOff
+  - Error status for CrashLoopBackOff and CreateContainerConfigError
   - CPU usage as percentage of pod's resource limit
-- Deployment and StatefulSet grouping
-  - Load balancer visualization for deployments
-  - Proper grouping based on deployment ownership
-  - Clear distinction between deployment and standalone pods
+
+- Pod Grouping and Load Balancer Rules
+
+  - **Load Balancer Visualization Rules**:
+
+    1. Deployments with Services (SHOW load balancer):
+       - Multiple replicas that need traffic distribution
+       - Has a non-headless Service for load balancing
+       - Example: API servers, web applications
+    2. StatefulSets (DO NOT show load balancer):
+       - Each pod has unique identity and storage
+       - Uses headless Service for direct pod addressing
+       - Example: Databases (postgres, rabbitmq)
+    3. Single Pod with Service (DO NOT show load balancer):
+       - No replicas to balance between
+       - Direct pod access is sufficient
+       - Example: Monitoring tools (grafana, prometheus)
+    4. Background Workers (DO NOT show load balancer):
+       - No incoming traffic to balance
+       - Internal cluster communication only
+       - Example: Message processors, batch jobs
+
+  - **Service Type Considerations**:
+
+    - LoadBalancer/NodePort: External traffic distribution
+    - ClusterIP: Internal traffic distribution
+    - Headless: Direct pod addressing (StatefulSets)
+
+  - **Implementation Details**:
+    - Check pod ownership (Deployment/StatefulSet/ReplicaSet)
+    - Verify associated Service existence and type
+    - Consider replica count for load balancing need
+    - Respect StatefulSet's direct addressing pattern
+
 - Layer-based organization
+
   - Four distinct layers: client, server, data, observability
   - Visual separation and clear labeling
   - Proper namespace mapping
+
 - Pod-to-pod connections
+
+  - Connections array describes logical or observed relationships
+  - Not directly retrieved from Kubernetes API
+  - Can be statically defined or dynamically generated
+  - Extensible for future enhancements
+
 - Status indicators and tooltips
+  - Hover tooltips with detailed pod information
+  - Color-coded status indicators:
+    - Green: Running
+    - Orange: Warning (waiting/not-ready)
+    - Red: Error (CrashLoopBackOff/CreateContainerConfigError)
+  - CPU percentage display for active pods
+  - Memory usage information when available
 
 ### 2. Traffic Control
 
@@ -111,38 +160,46 @@ MAX_RETRY_ATTEMPTS=3 # Maximum retry attempts
 
 ### Resource Limits
 
-\`\`\`yaml
+```yaml
 resources:
-requests:
-memory: "256Mi"
-cpu: "200m"
-limits:
-memory: "512Mi"
-cpu: "500m"
-\`\`\`
+  requests:
+    memory: "256Mi"
+    cpu: "200m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+```
 
 ### Health Checks
 
-\`\`\`yaml
+```yaml
 livenessProbe:
-initialDelaySeconds: 60
-periodSeconds: 15
-timeoutSeconds: 5
+  initialDelaySeconds: 60
+  periodSeconds: 15
+  timeoutSeconds: 5
 readinessProbe:
-initialDelaySeconds: 30
-periodSeconds: 10
-timeoutSeconds: 5
-\`\`\`
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+```
 
 ## Development
 
 ### Prerequisites
 
 - Node.js 18+
-- Docker
-- Kubernetes (Kind)
-- kubectl
-- make
+- Docker 24+
+- Kubernetes (Kind) 0.20+
+- kubectl 1.28+
+- make 4.0+
+
+**Dependency Versions**:
+
+- Next.js: 15.x
+- TypeScript: 5.x
+- Tailwind CSS: 4.x
+- D3.js: 7.x
+- Kubernetes Client: 0.18.x
 
 ### Quick Start
 
@@ -178,21 +235,40 @@ make status # Verify deployment
 
 1. **Mock Data Showing Instead of Real Data**
 
-   - Verify service account permissions
-   - Check metrics-server status
-   - Validate network policies
-
-   ```bash
-   kubectl auth can-i list pods --as=system:serviceaccount:client-layer:client-layer
-   kubectl get --raw /apis/metrics.k8s.io/v1beta1/pods
-   ```
+   - Verify service account permissions:
+     ```bash
+     kubectl auth can-i list pods --as=system:serviceaccount:client-layer:client-layer
+     kubectl auth can-i get pods/metrics --as=system:serviceaccount:client-layer:client-layer
+     ```
+   - Check metrics-server status:
+     ```bash
+     kubectl get --raw /apis/metrics.k8s.io/v1beta1/pods
+     kubectl get apiservice v1beta1.metrics.k8s.io
+     ```
+   - Validate network policies:
+     ```bash
+     kubectl get networkpolicies --all-namespaces
+     kubectl describe networkpolicy -n client-layer
+     ```
+   - Check service account token:
+     ```bash
+     kubectl describe sa client-layer -n client-layer
+     ```
 
 2. **Visualization Issues**
 
-   - Clear browser cache
+   - Clear browser cache and refresh
    - Check browser console for errors
    - Verify WebSocket connection
-   - Review pod labels and grouping
+   - Review pod labels and grouping:
+     ```bash
+     # Check pod labels
+     kubectl get pods -A --show-labels
+     # Check deployment ownership
+     kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.ownerReferences[*].kind}{"\n"}{end}'
+     # Check service selectors
+     kubectl get svc -A -o=custom-columns='NAME:.metadata.name,SELECTOR:.spec.selector'
+     ```
    - Verify pod status accuracy:
      ```bash
      # Check actual pod status
@@ -200,34 +276,65 @@ make status # Verify deployment
      # Check container status details
      kubectl describe pod <pod-name> -n <namespace>
      ```
-   - Verify deployment ownership:
-     ```bash
-     # Check pod ownership
-     kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.ownerReferences[*].kind}{"\n"}{end}'
-     ```
 
 3. **Performance Problems**
-   - Monitor resource usage
-   - Check network latency
-   - Verify cache effectiveness
-   - Review connection pooling
+   - Monitor resource usage:
+     ```bash
+     kubectl top pods -A
+     kubectl top nodes
+     ```
+   - Check network latency:
+     ```bash
+     kubectl exec -n client-layer deploy/client -- curl -w "\nTotal: %{time_total}s\n" kubernetes.default.svc
+     ```
+   - Review metrics server performance:
+     ```bash
+     kubectl logs -n kube-system -l k8s-app=metrics-server
+     ```
 
 ### Quick Fixes
 
-\`\`\`bash
-
+```bash
 # Restart Client Pod
-
 kubectl rollout restart deployment client -n client-layer
 
 # Check Logs
-
 kubectl logs -n client-layer -l app=client
 
 # Verify Connectivity
-
 kubectl exec -n client-layer deploy/client -- curl kubernetes.default.svc
-\`\`\`
+
+# Check Metrics Server
+kubectl -n kube-system logs -l k8s-app=metrics-server
+
+# Verify RBAC
+kubectl auth can-i --list --as=system:serviceaccount:client-layer:client-layer
+```
+
+### Error Messages and Reasons
+
+When mock data is shown, the following reasons may be displayed:
+
+1. "Running outside cluster" - Application is running in development mode
+2. "Service account credentials error" - Issues with reading service account token
+3. "Metrics server not available" - Metrics API is not accessible
+4. "Insufficient permissions to list pods" - RBAC permissions are not properly configured
+5. "Failed to connect to metrics server" - Network or configuration issues with metrics-server
+6. "Limited StatefulSet access" - Service account has limited access to StatefulSet resources
+
+For each error:
+
+1. Check the specific error message in the yellow warning banner
+2. Follow the corresponding troubleshooting steps above
+3. Review logs using `kubectl logs` for more details
+4. Verify configuration using `kubectl describe` on relevant resources
+5. For StatefulSet access issues, verify namespace-specific permissions:
+   ```bash
+   kubectl auth can-i list statefulsets --as=system:serviceaccount:client-layer:client-layer -n client-layer
+   kubectl auth can-i list statefulsets --as=system:serviceaccount:client-layer:client-layer -n server-layer
+   kubectl auth can-i list statefulsets --as=system:serviceaccount:client-layer:client-layer -n data-layer
+   kubectl auth can-i list statefulsets --as=system:serviceaccount:client-layer:client-layer -n observability-layer
+   ```
 
 ## Future Roadmap
 

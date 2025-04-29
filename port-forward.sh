@@ -1,5 +1,19 @@
 #!/bin/bash
 
+# Array to store PIDs of port-forward processes
+declare -a PIDS=()
+
+# Function to kill all port-forward processes
+cleanup() {
+    echo "Cleaning up port-forward processes..."
+    for pid in "${PIDS[@]}"; do
+        if ps -p $pid > /dev/null; then
+            kill $pid 2>/dev/null || true
+        fi
+    done
+    exit 0
+}
+
 # Function to find an available port
 find_available_port() {
     local base_port=$1
@@ -16,7 +30,6 @@ start_port_forward() {
     local namespace=$2
     local port=$3
     local target_port=$4
-    local resource_type="deployment"
 
     # Check if the service exists
     if ! kubectl get service -n $namespace $service &>/dev/null; then
@@ -33,7 +46,11 @@ start_port_forward() {
 
     echo "Starting port forward for $service on port $port..."
     kubectl port-forward -n $namespace svc/$service $port:$target_port &
+    PIDS+=($!)
 }
+
+# Set up trap to clean up on script exit
+trap cleanup EXIT INT TERM
 
 # Start port forwarding for all services
 start_port_forward client client-layer 3000 3000
@@ -56,6 +73,5 @@ echo "  RabbitMQ UI:   http://localhost:15672"
 echo "  Prometheus:    http://localhost:9090"
 echo "  Grafana:       http://localhost:3001"
 
-# Wait for Ctrl+C
-trap "kill 0" EXIT
+# Wait for all background processes
 wait 

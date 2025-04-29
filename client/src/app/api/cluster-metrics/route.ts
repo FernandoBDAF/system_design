@@ -1,4 +1,13 @@
-import { KubeConfig, CoreV1Api, V1Pod, V1Node } from "@kubernetes/client-node";
+import {
+  KubeConfig,
+  CoreV1Api,
+  V1Pod,
+  V1Node,
+  AppsV1Api,
+  V1Service,
+  V1Deployment,
+  V1StatefulSet,
+} from "@kubernetes/client-node";
 import fs from "fs";
 import https from "https";
 import { PodWithMetrics } from "../../../types/podWithMetrics";
@@ -79,30 +88,126 @@ export async function GET() {
         console.log(
           "[cluster-metrics] Running outside cluster, returning mock data"
         );
-        // Fallback: return mock pod metrics if running outside the cluster
-        return Response.json(mockPods);
+        return Response.json({
+          data: mockPods,
+          isMocked: true,
+          reason: "Running outside cluster",
+        });
       } else {
         console.error(
           "[cluster-metrics] Error reading service account credentials:",
           err
         );
-        throw err;
+        return Response.json({
+          data: mockPods,
+          isMocked: true,
+          reason:
+            "Service account credentials error: " +
+            (err instanceof Error ? err.message : "Unknown error"),
+        });
       }
     }
-    const namespace = process.env.NAMESPACE || "profile-service";
-    console.log("[cluster-metrics] Using namespace:", namespace);
+
+    // First verify metrics-server is available
+    try {
+      const metricsServerCheck = await new Promise<boolean>((resolve) => {
+        const options = {
+          hostname: "kubernetes.default.svc",
+          port: 443,
+          path: "/apis/metrics.k8s.io/v1beta1",
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+          ca,
+          rejectUnauthorized: false,
+        };
+        const req = https.request(options, (res) => {
+          resolve(res.statusCode === 200);
+        });
+        req.on("error", () => resolve(false));
+        req.end();
+      });
+
+      if (!metricsServerCheck) {
+        console.error("[cluster-metrics] Metrics server not available");
+        return Response.json({
+          data: mockPods,
+          isMocked: true,
+          reason: "Metrics server not available",
+        });
+      }
+    } catch (err) {
+      console.error("[cluster-metrics] Error checking metrics server:", err);
+      return Response.json({
+        data: mockPods,
+        isMocked: true,
+        reason: "Failed to connect to metrics server",
+      });
+    }
 
     // Get pods and nodes using @kubernetes/client-node
     console.log("[cluster-metrics] Fetching pods and nodes (all namespaces)");
     const kc = new KubeConfig();
     kc.loadFromDefault();
     const k8sApi = kc.makeApiClient(CoreV1Api);
+    const appsApi = kc.makeApiClient(AppsV1Api);
+
+    // Verify permissions by trying to list pods
+    try {
+      await k8sApi.listPodForAllNamespaces();
+    } catch (err) {
+      console.error("[cluster-metrics] Permission error listing pods:", err);
+      return Response.json({
+        data: mockPods,
+        isMocked: true,
+        reason: "Insufficient permissions to list pods",
+      });
+    }
+
+    // Continue with the rest of the implementation...
     const podsResponse = await k8sApi.listPodForAllNamespaces();
     const pods: V1Pod[] = podsResponse.items;
     const nodesResponse = await k8sApi.listNode();
     const nodes: V1Node[] = nodesResponse.items;
+
+    // Get services for all namespaces
+    const servicesResponse = await k8sApi.listServiceForAllNamespaces();
+    const services: V1Service[] = servicesResponse.items;
+
+    // Get deployments and statefulsets for all namespaces
+    const deploymentsResponse = await appsApi.listDeploymentForAllNamespaces();
+    const deployments: V1Deployment[] = deploymentsResponse.items;
+
+    // Try to get StatefulSets, but don't fail if we don't have permissions
+    let statefulSets: V1StatefulSet[] = [];
+    try {
+      // First try namespace-specific queries
+      for (const namespace of [
+        "client-layer",
+        "server-layer",
+        "data-layer",
+        "observability-layer",
+      ]) {
+        try {
+          const nsResponse = await appsApi.listNamespacedStatefulSet({
+            namespace,
+          });
+          statefulSets = [...statefulSets, ...nsResponse.items];
+        } catch (err) {
+          console.log(
+            `[cluster-metrics] Note: Cannot list StatefulSets in ${namespace}: ${err}`
+          );
+        }
+      }
+    } catch (err) {
+      console.log(
+        "[cluster-metrics] Note: Limited StatefulSet access, continuing with available data:" +
+          err
+      );
+    }
+
     console.log("[cluster-metrics] Found pods:", pods.length);
     console.log("[cluster-metrics] Found nodes:", nodes.length);
+    console.log("[cluster-metrics] Found services:", services.length);
 
     // Get metrics for all pods in all namespaces
     console.log("[cluster-metrics] Fetching metrics for all pods");
@@ -161,10 +266,74 @@ export async function GET() {
       // Deployment info
       const labels = pod.metadata?.labels || {};
       const ownerRefs = pod.metadata?.ownerReferences || [];
-      const deployment = labels.app || (ownerRefs[0]?.name ?? "");
-      const isDeploymentPod = ownerRefs.some(
-        (ref) => ref.kind === "Deployment" || ref.kind === "ReplicaSet"
+      const namespace = pod.metadata?.namespace || "";
+
+      // Find the pod's owner (Deployment or StatefulSet)
+      let ownerKind: "Deployment" | "StatefulSet" | "ReplicaSet" | undefined;
+      let replicas = 0;
+
+      // First check direct owner
+      const directOwner = ownerRefs[0];
+      if (directOwner) {
+        if (directOwner.kind === "ReplicaSet") {
+          // Find the Deployment that owns this ReplicaSet
+          const deployment = deployments.find(
+            (d: V1Deployment) =>
+              d.metadata?.namespace === namespace &&
+              d.spec?.selector?.matchLabels &&
+              Object.entries(d.spec.selector.matchLabels).every(
+                ([key, value]) => labels[key] === value
+              )
+          );
+          if (deployment) {
+            ownerKind = "Deployment";
+            replicas = deployment.spec?.replicas || 0;
+          } else {
+            ownerKind = "ReplicaSet";
+          }
+        } else if (directOwner.kind === "StatefulSet") {
+          ownerKind = "StatefulSet";
+          const statefulSet = statefulSets.find(
+            (s: V1StatefulSet) =>
+              s.metadata?.name === directOwner.name &&
+              s.metadata?.namespace === namespace
+          );
+          replicas = statefulSet?.spec?.replicas || 0;
+        }
+      }
+
+      // Find matching service
+      const podService = services.find(
+        (svc: V1Service) =>
+          svc.metadata?.namespace === namespace &&
+          svc.spec?.selector &&
+          Object.entries(svc.spec.selector).every(
+            ([key, value]) => labels[key] === value
+          )
       );
+
+      const serviceInfo = podService
+        ? {
+            name: podService.metadata?.name || "",
+            type:
+              podService.spec?.type === "ClusterIP" &&
+              podService.spec?.clusterIP === "None"
+                ? "Headless"
+                : podService.spec?.type || "ClusterIP",
+          }
+        : undefined;
+
+      // More precise deployment detection from labels
+      const deployment = labels.app || labels["app.kubernetes.io/name"] || "";
+
+      // If it's a managed pod but no deployment name found in labels,
+      // try to extract it from owner reference
+      const deploymentFromOwner =
+        ownerKind && !deployment
+          ? ownerRefs[0]?.name?.split("-")[0] // Get base name without hash
+          : "";
+
+      const finalDeployment = deployment || deploymentFromOwner;
 
       // Determine pod status
       let status = pod.status?.phase || "";
@@ -174,7 +343,10 @@ export async function GET() {
         const mainContainer = containerStatuses[0];
         if (mainContainer.state?.waiting) {
           status = "Warning";
-          if (mainContainer.state.waiting.reason === "CrashLoopBackOff") {
+          if (
+            mainContainer.state.waiting.reason === "CrashLoopBackOff" ||
+            mainContainer.state.waiting.reason === "CreateContainerConfigError"
+          ) {
             status = "Error";
           }
         } else if (!mainContainer.ready) {
@@ -191,9 +363,13 @@ export async function GET() {
         cpu,
         cpuPercent,
         memory,
-        deployment,
-        isDeploymentPod,
+        deployment: finalDeployment,
+        isDeploymentPod: Boolean(ownerKind),
         layer: mapLayerLabel(layerLabel),
+        ownerKind,
+        replicas,
+        service: serviceInfo,
+        labels,
       };
     });
 
@@ -202,12 +378,19 @@ export async function GET() {
       podMetrics.length,
       "pods"
     );
-    return Response.json(podMetrics);
+    return Response.json({
+      data: podMetrics,
+      isMocked: false,
+    });
   } catch (error) {
     console.error("[cluster-metrics] Error in metrics API:", error);
-    return Response.json(
-      { error: "Failed to fetch pod metrics" },
-      { status: 500 }
-    );
+    return Response.json({
+      data: mockPods,
+      isMocked: true,
+      reason:
+        error instanceof Error
+          ? error.message
+          : "Unknown error in cluster metrics API",
+    });
   }
 }

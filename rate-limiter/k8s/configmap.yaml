@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rate-limiter-config
+  labels:
+    app: rate-limiter
+data:
+  RATE_LIMIT_REQUESTS: "100"
+  RATE_LIMIT_WINDOW_MINUTES: "1"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  SERVICE_PORT: "8080"
+  LOG_LEVEL: "info"

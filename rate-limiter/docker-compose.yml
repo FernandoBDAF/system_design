@@ -1,0 +1,44 @@
+version: "3.8"
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - rate-limiter-network
+
+  rate-limiter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - RATE_LIMIT_REQUESTS=5
+      - RATE_LIMIT_WINDOW_MINUTES=1
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - BACKEND_SERVER_URL=http://example-backend:80
+      - SERVICE_PORT=8080
+    depends_on:
+      - redis
+    networks:
+      - rate-limiter-network
+
+  example-backend:
+    image: ealen/echo-server:latest
+    ports:
+      - "8081:80"
+    networks:
+      - rate-limiter-network
+
+networks:
+  rate-limiter-network:
+    driver: bridge
+
+volumes:
+  redis_data:

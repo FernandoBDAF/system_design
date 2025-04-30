@@ -1,0 +1,12 @@
+rate_limiter:
+  requests: 100
+  window_minutes: 1
+
+redis:
+  host: localhost
+  port: 6379
+  password: ""
+
+service:
+  backend_url: "http://localhost:8081"
+  port: 8080

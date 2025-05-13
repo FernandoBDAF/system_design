@@ -108,15 +108,15 @@ start: create-cluster build
 
 stop:
 	@echo "Stopping the entire stack..."
-	@kubectl delete -f k8s/namespaces.yaml --ignore-not-found=true
-	@kubectl delete -f k8s/network-policies.yaml --ignore-not-found=true
-	@kubectl delete -f k8s/postgresql.yaml --ignore-not-found=true
-	@kubectl delete -f k8s/redis.yaml --ignore-not-found=true
-	@kubectl delete -f k8s/rabbitmq.yaml --ignore-not-found=true
-	@kubectl delete -f k8s/server.yaml --ignore-not-found=true
-	@kubectl delete -f k8s/worker.yaml --ignore-not-found=true
-	@kubectl delete -f k8s/client.yaml --ignore-not-found=true
-	@kubectl delete -f k8s/monitoring.yaml --ignore-not-found=true
+	@kubectl delete -f k8s/config/infrastructure/namespaces.yaml --ignore-not-found=true
+	@kubectl delete -f k8s/config/infrastructure/network-policies.yaml --ignore-not-found=true
+	@kubectl delete -f k8s/config/layers/data/postgresql.yaml --ignore-not-found=true
+	@kubectl delete -f k8s/config/layers/data/redis.yaml --ignore-not-found=true
+	@kubectl delete -f k8s/config/layers/data/rabbitmq.yaml --ignore-not-found=true
+	@kubectl delete -f k8s/config/layers/server/server.yaml --ignore-not-found=true
+	@kubectl delete -f k8s/config/layers/server/worker.yaml --ignore-not-found=true
+	@kubectl delete -f k8s/config/layers/client/client.yaml --ignore-not-found=true
+	@kubectl delete -f k8s/config/layers/observability/monitoring.yaml --ignore-not-found=true
 
 restart: stop start
 

@@ -76,7 +76,7 @@ For more detailed information about specific aspects of the server, see:
    - Connection management
    - Replication support
 
-3. **Cache Layer** (`internal/cache`)
+3. **Cache Layer** (`internal/cache`) -> study and improve cache srtategies
 
    - Redis implementation
    - Cache invalidation

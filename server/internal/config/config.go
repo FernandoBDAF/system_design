@@ -41,7 +41,7 @@ func LoadConfig() (*Config, error) {
 	cfg.Server.Port = getEnv("SERVER_PORT", "8080")
 
 	// Database configuration
-	cfg.Database.URI = getEnv("DB_URI", "postgres://profile:profile123@postgres:5432/profile_service")
+	cfg.Database.URI = getEnv("DB_URI", "postgres://profile:profile123@localhost:5432/profile_service?sslmode=disable")
 	cfg.Database.Database = getEnv("DB_NAME", "profile_service")
 	timeout, err := time.ParseDuration(getEnv("DB_TIMEOUT", "10s"))
 	if err != nil {
@@ -50,12 +50,12 @@ func LoadConfig() (*Config, error) {
 	cfg.Database.Timeout = timeout
 
 	// Cache configuration
-	cfg.Cache.Address = getEnv("REDIS_HOST", "redis") + ":" + getEnv("REDIS_PORT", "6379")
+	cfg.Cache.Address = getEnv("REDIS_HOST", "localhost") + ":" + getEnv("REDIS_PORT", "6379")
 	cfg.Cache.Password = getEnv("REDIS_PASSWORD", "")
 	cfg.Cache.DB = getEnvAsInt("REDIS_DB", 0)
 
 	// Queue configuration
-	cfg.Queue.URI = getEnv("RABBITMQ_URI", "amqp://guest:guest@rabbitmq.server-layer.svc.cluster.local:5672/?connection_timeout=10&retry_delay=5")
+	cfg.Queue.URI = getEnv("RABBITMQ_URI", "amqp://guest:guest@localhost:5672/?connection_timeout=10&retry_delay=5")
 	cfg.Queue.Username = getEnv("RABBITMQ_USERNAME", "guest")
 	cfg.Queue.Password = getEnv("RABBITMQ_PASSWORD", "guest")
 

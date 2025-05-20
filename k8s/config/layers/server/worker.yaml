@@ -23,9 +23,9 @@ spec:
           imagePullPolicy: Never
           env:
             - name: RABBITMQ_URI
-              value: "amqp://guest:guest@rabbitmq.data-layer.svc.cluster.local:5672/?connection_timeout=10&retry_delay=5"
+              value: "amqp://guest:guest@host.docker.internal:5672/?connection_timeout=10&retry_delay=5"
             - name: DB_HOST
-              value: "postgres.data-layer.svc.cluster.local"
+              value: "host.docker.internal"
           resources:
             requests:
               memory: "256Mi"

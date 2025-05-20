@@ -27,33 +27,37 @@ import (
 )
 
 func main() {
-	// Load configuration
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
-	}
-
-	// Initialize logger
+	// Initialize logger first
 	if err := logger.InitLogger(); err != nil {
 		log.Fatalf("Failed to initialize logger: %v", err)
 	}
+	logger.Log.Info("Logger initialized")
 	defer logger.Log.Sync()
+
+	// Load configuration
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		logger.Log.Fatal("Failed to load configuration", zap.Error(err))
+	}
+
+	logger.Log.Info("Configuration loaded", zap.Any("config", cfg))
 
 	// Initialize repository
 	profileRepo, err := postgresql.NewRepository(cfg)
 	if err != nil {
 		logger.Log.Fatal("Failed to create PostgreSQL repository", zap.Error(err))
 	}
+	logger.Log.Info("PostgreSQL repository created")
 	defer profileRepo.Close(context.Background())
 
 	// Initialize Redis client
 	var cacheImpl cache.Cache
 	redisClient, err := redis.NewClient(cfg)
 	if err != nil {
-		log.Printf("WARN: Failed to initialize Redis client: %v", err)
-		log.Printf("WARN: Using in-memory cache implementation")
+		logger.Log.Warn("Failed to initialize Redis client, continuing without cache", zap.Error(err))
 		cacheImpl = cache.NewMemoryCache()
 	} else {
+		logger.Log.Info("Redis client initialized")
 		cacheImpl = redisClient
 	}
 
@@ -61,6 +65,8 @@ func main() {
 	rabbitConn, err := rabbitmq.NewQueue(cfg)
 	if err != nil {
 		logger.Log.Warn("Failed to connect to RabbitMQ, continuing without queue", zap.Error(err))
+	} else {
+		logger.Log.Info("RabbitMQ connection initialized")
 	}
 
 	// Initialize components
@@ -75,6 +81,7 @@ func main() {
 	if podName == "" {
 		podName = "unknown"
 	}
+	logger.Log.Info("Pod name", zap.String("podName", podName))
 
 	// Add middleware for logging, metrics, and pod name header
 	router.Use(func(c *gin.Context) {
@@ -131,11 +138,13 @@ func main() {
 		if err := redisClient.Close(); err != nil {
 			logger.Log.Error("Failed to close Redis connection", zap.Error(err))
 		}
+		logger.Log.Info("Redis connection closed")
 	}
 	if rabbitConn != nil {
 		if err := rabbitConn.Close(); err != nil {
 			logger.Log.Error("Failed to close RabbitMQ connection", zap.Error(err))
 		}
+		logger.Log.Info("RabbitMQ connection closed")
 	}
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {

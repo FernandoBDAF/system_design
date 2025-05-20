@@ -34,11 +34,13 @@ func NewRepository(cfg *config.Config) (repository.Store, error) {
 
 	// Test the connection
 	if err := db.Ping(); err != nil {
+		logger.Log.Error("Failed to connect to PostgreSQL", zap.Error(err))
 		return nil, err
 	}
 
 	// Initialize database schema
 	if err := initSchema(db); err != nil {
+		logger.Log.Error("Failed to initialize database schema", zap.Error(err))
 		return nil, err
 	}
 

@@ -63,13 +63,13 @@ spec:
             - name: SERVER_PORT
               value: "8080"
             - name: DB_URI
-              value: "postgres://profile:profile123@postgres.data-layer.svc.cluster.local:5432/profile_service?sslmode=disable"
+              value: "postgres://profile:profile123@host.docker.internal:5432/profile_service?sslmode=disable"
             - name: DB_NAME
               value: "profile_service"
             - name: DB_TIMEOUT
               value: "10s"
             - name: REDIS_HOST
-              value: "redis.data-layer.svc.cluster.local"
+              value: "host.docker.internal"
             - name: REDIS_PORT
               value: "6379"
             - name: REDIS_PASSWORD
@@ -78,7 +78,7 @@ spec:
                   name: server-redis-secret
                   key: password
             - name: RABBITMQ_URI
-              value: "amqp://guest:guest@rabbitmq.data-layer.svc.cluster.local:5672/?connection_timeout=10&retry_delay=5"
+              value: "amqp://guest:guest@host.docker.internal:5672/?connection_timeout=10&retry_delay=5"
             - name: POD_NAME
               valueFrom:
                 fieldRef:

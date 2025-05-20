@@ -8,9 +8,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/fernandobarroso/profile-service/internal/api/middleware/logger"
 	"github.com/fernandobarroso/profile-service/internal/config"
 	"github.com/fernandobarroso/profile-service/internal/models"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 )
 
 const (
@@ -78,6 +80,7 @@ func NewClient(cfg *config.Config) (*Cache, error) {
 
 	// Test connection
 	if err := client.Ping(context.Background()).Err(); err != nil {
+		logger.Log.Error("Failed to connect to Redis", zap.Error(err))
 		return nil, err
 	}
 
